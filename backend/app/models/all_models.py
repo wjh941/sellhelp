@@ -59,6 +59,7 @@ class Product(Base):
 
     category = relationship("Category", back_populates="products")
     batches = relationship("ProductBatch", back_populates="product")
+    inventory_movements = relationship("InventoryMovement", back_populates="product")
 
 
 class Supplier(Base):
@@ -170,6 +171,7 @@ class ProductBatch(Base):
     product = relationship("Product", back_populates="batches")
     purchase_item = relationship("PurchaseOrderItem", back_populates="batch")
     outbound_records = relationship("BatchOutbound", back_populates="batch")
+    inventory_movements = relationship("InventoryMovement", back_populates="batch")
 
     __table_args__ = (
         Index("ix_batches_product_expiry", "product_id", "expiry_date"),
@@ -262,6 +264,29 @@ class BatchOutbound(Base):
 
     sales_item = relationship("SalesOrderItem", back_populates="outbound_records")
     batch = relationship("ProductBatch", back_populates="outbound_records")
+
+
+class InventoryMovement(Base):
+    """Immutable physical inventory ledger entry."""
+    __tablename__ = "inventory_movements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
+    batch_id = Column(Integer, ForeignKey("product_batches.id", ondelete="SET NULL"), index=True)
+    direction = Column(String(20), nullable=False)
+    quantity = Column(Float, nullable=False)
+    reason = Column(String(50), nullable=False, index=True)
+    reference_no = Column(String(100), index=True)
+    purchase_order_id = Column(Integer, ForeignKey("purchase_orders.id", ondelete="SET NULL"), index=True)
+    sales_order_id = Column(Integer, ForeignKey("sales_orders.id", ondelete="SET NULL"), index=True)
+    return_order_id = Column(Integer, ForeignKey("return_orders.id", ondelete="SET NULL"), index=True)
+    stock_take_id = Column(Integer, ForeignKey("stock_takes.id", ondelete="SET NULL"), index=True)
+    operator = Column(String(50))
+    remark = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    product = relationship("Product", back_populates="inventory_movements")
+    batch = relationship("ProductBatch", back_populates="inventory_movements")
 
 
 # ========== 模块4：退货、盘点 ==========

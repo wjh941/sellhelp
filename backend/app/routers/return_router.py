@@ -71,14 +71,16 @@ def create_return(data: ReturnOrderCreate, db: Session = Depends(get_db)):
     if not product:
         raise HTTPException(status_code=400, detail="商品不存在")
 
+    inventory_service = InventoryService(db)
     # 客户退货：先检查是否有原销售单
+    selected_batch_id = data.batch_id
+    supplier_allocations = []
     if data.return_type == "客户退货" and data.related_order_no:
         sale_order = db.query(SalesOrder).filter(SalesOrder.order_no == data.related_order_no).first()
         if sale_order:
-            inventory_service = InventoryService(db)
-            # 退回到指定批次
             if data.batch_id:
                 inventory_service.return_to_batch(data.batch_id, data.quantity)
+                selected_batch_id = data.batch_id
             else:
                 # 如果未指定批次，创建新批次记录
                 new_batch = ProductBatch(
@@ -90,6 +92,8 @@ def create_return(data: ReturnOrderCreate, db: Session = Depends(get_db)):
                     remark="客户退货入库"
                 )
                 db.add(new_batch)
+                db.flush()
+                selected_batch_id = new_batch.id
         else:
             # 无原单，直接入库
             new_batch = ProductBatch(
@@ -101,29 +105,31 @@ def create_return(data: ReturnOrderCreate, db: Session = Depends(get_db)):
                 remark="客户退货入库"
             )
             db.add(new_batch)
+            db.flush()
+            selected_batch_id = new_batch.id
 
     elif data.return_type == "供应商退货":
         # 供应商退货：从指定批次扣减
         if data.batch_id:
             batch = db.query(ProductBatch).filter(ProductBatch.id == data.batch_id).first()
-            if batch:
-                if batch.remaining_quantity < data.quantity:
-                    raise HTTPException(status_code=400, detail="批次库存不足")
-                batch.remaining_quantity -= data.quantity
-                batch.total_quantity -= data.quantity
-        else:
-            # 从最早批次扣减
-            batches = db.query(ProductBatch).filter(
-                ProductBatch.product_id == product.id,
-                ProductBatch.remaining_quantity >= data.quantity
-            ).order_by(ProductBatch.expiry_date.asc()).all()
-            if not batches:
-                raise HTTPException(status_code=400, detail="没有足够库存进行退货")
-            batch = batches[0]
+            if not batch:
+                raise HTTPException(status_code=400, detail="批次不存在")
+            if batch.expiry_date and batch.expiry_date <= date.today():
+                raise HTTPException(status_code=400, detail="批次已过期，无法退给供应商")
             if batch.remaining_quantity < data.quantity:
                 raise HTTPException(status_code=400, detail="批次库存不足")
             batch.remaining_quantity -= data.quantity
             batch.total_quantity -= data.quantity
+            selected_batch_id = batch.id
+        else:
+            # 从可销售批次按 FIFO 扣减
+            try:
+                supplier_allocations = inventory_service.find_fifo_batches(product.id, data.quantity)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc))
+            for batch, allocated_quantity in supplier_allocations:
+                batch.remaining_quantity -= allocated_quantity
+                batch.total_quantity -= allocated_quantity
 
     return_order = ReturnOrder(
         order_no=_generate_return_no(),
@@ -138,6 +144,35 @@ def create_return(data: ReturnOrderCreate, db: Session = Depends(get_db)):
         operator=data.operator
     )
     db.add(return_order)
+    db.flush()
+    if data.return_type == "客户退货":
+        inventory_service = InventoryService(db)
+        inventory_service.record_movement(
+            product_id=product.id,
+            batch_id=selected_batch_id,
+            direction="inbound",
+            quantity=data.quantity,
+            reason="customer_return",
+            reference_no=return_order.order_no,
+            return_order_id=return_order.id,
+            operator=data.operator,
+            remark=data.reason,
+        )
+    else:
+        if not supplier_allocations:
+            supplier_allocations = [(db.get(ProductBatch, selected_batch_id), data.quantity)]
+        for batch, allocated_quantity in supplier_allocations:
+            inventory_service.record_movement(
+                product_id=product.id,
+                batch_id=batch.id,
+                direction="outbound",
+                quantity=allocated_quantity,
+                reason="supplier_return",
+                reference_no=return_order.order_no,
+                return_order_id=return_order.id,
+                operator=data.operator,
+                remark=data.reason,
+            )
     db.commit()
     db.refresh(return_order)
 
@@ -260,12 +295,24 @@ def confirm_stock_take(items: List[StockTakeItemCreate], db: Session = Depends(g
             confirmed=True
         )
         db.add(stocktake)
+        db.flush()
 
         # 如果有差异且已确认，调整库存
         if item.batch_id and diff != 0:
             batch = db.query(ProductBatch).filter(ProductBatch.id == item.batch_id).first()
             if batch:
                 batch.remaining_quantity = max(0, batch.remaining_quantity + diff)
+                InventoryService(db).record_movement(
+                    product_id=item.product_id,
+                    batch_id=batch.id,
+                    direction="inbound" if diff > 0 else "outbound",
+                    quantity=abs(diff),
+                    reason="stocktake_adjustment",
+                    reference_no=f"stocktake:{stocktake.id}",
+                    stock_take_id=stocktake.id,
+                    operator=item.operator if hasattr(item, "operator") else None,
+                    remark=item.reason,
+                )
 
         results.append(StockTakeResponse.model_validate(stocktake))
 

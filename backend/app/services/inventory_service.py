@@ -4,13 +4,14 @@ FIFO先进先出库存服务
 确保商品按照最早入库/最早到期的批次优先出库，防止过期亏损
 """
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional, Tuple
 import math
 
 from ..models.all_models import (
-    Product, ProductBatch, PurchaseOrderItem, SalesOrderItem, BatchOutbound
+    Product, ProductBatch, PurchaseOrderItem, SalesOrderItem, BatchOutbound,
+    InventoryMovement
 )
 
 
@@ -40,6 +41,17 @@ class InventoryService:
             ProductBatch.production_date.asc()
         ).all()
 
+    def get_saleable_batches(self, product_id: int) -> List[ProductBatch]:
+        """Return physical batches that can be sold today."""
+        return self.db.query(ProductBatch).filter(
+            ProductBatch.product_id == product_id,
+            ProductBatch.remaining_quantity > 0,
+            (ProductBatch.expiry_date.is_(None) | (ProductBatch.expiry_date > date.today()))
+        ).order_by(
+            ProductBatch.expiry_date.asc(),
+            ProductBatch.production_date.asc()
+        ).all()
+
     def get_batch_by_id(self, batch_id: int) -> Optional[ProductBatch]:
         """根据ID获取批次"""
         return self.db.query(ProductBatch).filter(ProductBatch.id == batch_id).first()
@@ -49,7 +61,10 @@ class InventoryService:
         FIFO分配：根据需求数量，从最早批次开始分配出库量
         返回 [(批次, 出库数量), ...]
         """
-        batches = self.get_product_batches(product_id)
+        if quantity <= 0:
+            raise ValueError("quantity must be greater than zero")
+
+        batches = self.get_saleable_batches(product_id)
         remaining = quantity
         result = []
 
@@ -94,6 +109,9 @@ class InventoryService:
         确认出库：扣减批次库存，记录出库追踪
         """
         allocations = self.find_fifo_batches(product_id, quantity)
+        sales_item = self.db.query(SalesOrderItem).filter(SalesOrderItem.id == sales_item_id).first()
+        reference_no = sales_item.sales_order.order_no if sales_item and sales_item.sales_order else None
+        sales_order_id = sales_item.sales_order_id if sales_item else None
 
         for batch, take_qty in allocations:
             # 扣减批次库存
@@ -107,6 +125,16 @@ class InventoryService:
                 unit_cost=batch.purchase_price
             )
             self.db.add(outbound)
+            self.record_movement(
+                product_id=product_id,
+                batch_id=batch.id,
+                direction="outbound",
+                quantity=take_qty,
+                reason="sale",
+                reference_no=reference_no,
+                sales_order_id=sales_order_id,
+                operator=sales_item.sales_order.operator if sales_item and sales_item.sales_order else None,
+            )
 
         # 检查批次是否过期
         self._check_expiry()
@@ -123,7 +151,45 @@ class InventoryService:
             batch = self.get_batch_by_id(record.batch_id)
             if batch:
                 batch.remaining_quantity += record.outbound_quantity
+                sales_item = record.sales_item
+                sales_order = sales_item.sales_order if sales_item else None
+                self.record_movement(
+                    product_id=batch.product_id,
+                    batch_id=batch.id,
+                    direction="inbound",
+                    quantity=record.outbound_quantity,
+                    reason="sale_reversal",
+                    reference_no=sales_order.order_no if sales_order else None,
+                    sales_order_id=sales_order.id if sales_order else None,
+                    operator=sales_order.operator if sales_order else None,
+                )
             self.db.delete(record)
+
+    def record_movement(self, product_id: int, batch_id: Optional[int], direction: str,
+                        quantity: float, reason: str, reference_no: Optional[str] = None,
+                        purchase_order_id: Optional[int] = None, sales_order_id: Optional[int] = None,
+                        return_order_id: Optional[int] = None, stock_take_id: Optional[int] = None,
+                        operator: Optional[str] = None, remark: Optional[str] = None) -> InventoryMovement:
+        if quantity <= 0:
+            raise ValueError("quantity must be greater than zero")
+        if direction not in {"inbound", "outbound"}:
+            raise ValueError("direction must be inbound or outbound")
+        movement = InventoryMovement(
+            product_id=product_id,
+            batch_id=batch_id,
+            direction=direction,
+            quantity=quantity,
+            reason=reason,
+            reference_no=reference_no,
+            purchase_order_id=purchase_order_id,
+            sales_order_id=sales_order_id,
+            return_order_id=return_order_id,
+            stock_take_id=stock_take_id,
+            operator=operator,
+            remark=remark,
+        )
+        self.db.add(movement)
+        return movement
 
     def add_batch_stock(self, product_id: int, batch_no: str, quantity: float,
                         purchase_price: float, production_date: date = None,
@@ -131,6 +197,8 @@ class InventoryService:
         """
         增加批次库存（入库时调用）
         """
+        if quantity <= 0:
+            raise ValueError("quantity must be greater than zero")
         batch = ProductBatch(
             product_id=product_id,
             batch_no=batch_no,
@@ -149,6 +217,8 @@ class InventoryService:
         """
         退回批次库存（退货时使用）
         """
+        if quantity <= 0:
+            raise ValueError("quantity must be greater than zero")
         batch = self.get_batch_by_id(batch_id)
         if not batch:
             raise ValueError("批次不存在")

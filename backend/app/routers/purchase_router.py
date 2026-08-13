@@ -89,6 +89,8 @@ def create_purchase_order(data: PurchaseOrderCreate, db: Session = Depends(get_d
         operator=data.operator,
         remark=data.remark
     )
+    db.add(order)
+    db.flush()
 
     total_amount = 0
     inventory_service = InventoryService(db)
@@ -129,12 +131,23 @@ def create_purchase_order(data: PurchaseOrderCreate, db: Session = Depends(get_d
             remaining_quantity=item_data.quantity
         )
         db.add(batch)
+        db.flush()
+        inventory_service.record_movement(
+            product_id=item_data.product_id,
+            batch_id=batch.id,
+            direction="inbound",
+            quantity=item_data.quantity,
+            reason="purchase",
+            reference_no=order.order_no,
+            purchase_order_id=order.id,
+            operator=data.operator,
+            remark=data.remark,
+        )
 
         # 更新商品参考进价
         product.purchase_price = item_data.unit_price
 
     order.total_amount = total_amount
-    db.add(order)
     db.commit()
     db.refresh(order)
 
