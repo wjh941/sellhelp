@@ -2,9 +2,17 @@
 盈泰副食贸易管理系统 - Pydantic Schemas
 用于API请求/响应的数据验证
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from datetime import datetime, date
-from typing import Optional, List, Any
+from decimal import Decimal
+from typing import Annotated, Any, List, Literal, Optional
+
+
+PositiveQuantity = Annotated[float, Field(gt=Decimal("0"))]
+PositiveAmount = Annotated[float, Field(gt=Decimal("0"))]
+NonNegativeAmount = Annotated[float, Field(ge=Decimal("0"))]
+PaymentType = Literal["\u73b0\u7ed3", "\u8d4a\u8d26", "\u90e8\u5206\u7ed3\u8d26"]
+ReturnType = Literal["\u5ba2\u6237\u9000\u8d27", "\u4f9b\u5e94\u5546\u9000\u8d27"]
 
 
 # ========== 商品分类 ==========
@@ -124,9 +132,15 @@ class PurchaseItemCreate(BaseModel):
     batch_no: str
     production_date: Optional[date] = None
     expiry_date: Optional[date] = None
-    quantity: float
-    unit_price: float
+    quantity: PositiveQuantity
+    unit_price: PositiveAmount
     remark: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_batch_dates(self):
+        if self.production_date and self.expiry_date and self.expiry_date < self.production_date:
+            raise ValueError("expiry_date must not be before production_date")
+        return self
 
 class PurchaseItemResponse(BaseModel):
     id: int
@@ -149,7 +163,7 @@ class PurchaseOrderCreate(BaseModel):
     purchase_date: Optional[datetime] = None
     operator: Optional[str] = None
     remark: Optional[str] = None
-    items: List[PurchaseItemCreate]
+    items: Annotated[List[PurchaseItemCreate], Field(min_length=1)]
 
 
 class PurchaseOrderResponse(BaseModel):
@@ -171,8 +185,8 @@ class PurchaseOrderResponse(BaseModel):
 # ========== 销售单 ==========
 class SalesItemCreate(BaseModel):
     product_id: int
-    quantity: float
-    unit_price: float
+    quantity: PositiveQuantity
+    unit_price: NonNegativeAmount
     remark: Optional[str] = None
 
 class SalesItemResponse(BaseModel):
@@ -195,14 +209,30 @@ class SalesOrderCreate(BaseModel):
     sale_date: Optional[datetime] = None
     operator: Optional[str] = None
     remark: Optional[str] = None
-    payment_type: str = "现结"
-    paid_amount: Optional[float] = None
-    items: List[SalesItemCreate]
+    payment_type: PaymentType = "现结"
+    paid_amount: Optional[NonNegativeAmount] = None
+    items: Annotated[List[SalesItemCreate], Field(min_length=1)]
+
+    @model_validator(mode="after")
+    def validate_payment(self):
+        if self.payment_type not in PaymentType.__args__:
+            raise ValueError("unsupported payment_type")
+        if self.paid_amount is not None and self.paid_amount < 0:
+            raise ValueError("paid_amount must not be negative")
+        return self
 
 
 class SalesOrderPay(BaseModel):
-    payment_type: str = "现结"
-    paid_amount: Optional[float] = None
+    payment_type: PaymentType = "现结"
+    paid_amount: Optional[NonNegativeAmount] = None
+
+    @model_validator(mode="after")
+    def validate_payment(self):
+        if self.payment_type not in PaymentType.__args__:
+            raise ValueError("unsupported payment_type")
+        if self.paid_amount is not None and self.paid_amount < 0:
+            raise ValueError("paid_amount must not be negative")
+        return self
 
 
 class SalesOrderResponse(BaseModel):
@@ -231,13 +261,13 @@ class SalesOrderResponse(BaseModel):
 
 # ========== 退货 ==========
 class ReturnOrderCreate(BaseModel):
-    return_type: str
+    return_type: ReturnType
     related_order_no: Optional[str] = None
     partner_id: Optional[int] = None
     product_id: int
     batch_id: Optional[int] = None
-    quantity: float
-    refund_amount: float = 0
+    quantity: PositiveQuantity
+    refund_amount: NonNegativeAmount = 0
     reason: Optional[str] = None
     operator: Optional[str] = None
 
