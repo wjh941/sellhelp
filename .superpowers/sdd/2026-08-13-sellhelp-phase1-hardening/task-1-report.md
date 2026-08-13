@@ -36,7 +36,7 @@ Output for both commands: `12 passed, 16 warnings`. `pytest.ini` limits collecti
 
 ## Commit
 
-Commit hash: `ad63867157e4697d99335e31af92e8bf7fc91a1c` (`test: add isolated transaction validation coverage`).
+Task 1 implementation commit: `4ae81140fc86ec5492fc99091edbd5fac25a6d91` (`test: add isolated transaction validation coverage`).
 
 ## Residual Risk
 
