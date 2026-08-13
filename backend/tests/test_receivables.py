@@ -1,7 +1,7 @@
 from datetime import datetime
 
 import pytest
-from app.models.all_models import Customer, ReceivableLedger, SalesOrder
+from app.models.all_models import Customer, Product, ProductBatch, ReceivableLedger, SalesOrder
 from app.services.receivable_service import ReceivableService
 
 
@@ -192,6 +192,41 @@ def test_service_rejects_inconsistent_order_transition_before_mutation(db_sessio
     assert db_session.get(SalesOrder, order.id).debt_amount == pytest.approx(100)
     assert db_session.get(Customer, customer.id).current_debt == pytest.approx(90)
     assert ledger_movements(db_session) == []
+
+
+def test_sales_order_rejects_inconsistent_customer_before_mutating_transaction_state(client, db_session):
+    customer = Customer(name="inconsistent order creation customer", current_debt=90, total_consumption=12)
+    product = Product(name="valid product", unit="unit", wholesale_price=10, purchase_price=6)
+    db_session.add_all([customer, product])
+    db_session.flush()
+    batch = ProductBatch(
+        product_id=product.id,
+        batch_no="B-VALID",
+        purchase_price=6,
+        total_quantity=10,
+        remaining_quantity=10,
+    )
+    db_session.add(batch)
+    db_session.commit()
+
+    response = client.post(
+        "/api/sales-orders",
+        json={
+            "customer_id": customer.id,
+            "payment_type": CASH,
+            "items": [{"product_id": product.id, "quantity": 2, "unit_price": 10}],
+        },
+    )
+
+    assert response.status_code == 400
+    assert "reconcil" in response.json()["detail"].lower()
+    db_session.expire_all()
+    assert db_session.query(SalesOrder).count() == 0
+    assert db_session.get(ProductBatch, batch.id).remaining_quantity == pytest.approx(10)
+    persisted_customer = db_session.get(Customer, customer.id)
+    assert persisted_customer.current_debt == pytest.approx(90)
+    assert persisted_customer.total_consumption == pytest.approx(12)
+    assert db_session.query(ReceivableLedger).count() == 0
 
 
 def test_batch_repayment_does_not_commit_inconsistent_customer_changes(client, db_session):

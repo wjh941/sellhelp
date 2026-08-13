@@ -127,6 +127,16 @@ def create_sales_order(data: SalesOrderCreate, db: Session = Depends(get_db)):
     if not customer:
         raise HTTPException(status_code=400, detail="客户不存在")
 
+    receivable_service = ReceivableService(db)
+    try:
+        receivable_service.validate_customer_aggregate(
+            customer,
+            receivable_service.outstanding_debt(customer.id),
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+
     inventory_service = InventoryService(db)
     items_data = []
     total_amount = 0
@@ -232,7 +242,7 @@ def create_sales_order(data: SalesOrderCreate, db: Session = Depends(get_db)):
 
     # Automatically update customer consumption and receivable balance.
     customer.total_consumption += total_amount
-    ReceivableService(db).apply_order_balance_change(order, 0, "sales_order_created", order.order_no)
+    receivable_service.apply_order_balance_change(order, 0, "sales_order_created", order.order_no)
 
     db.commit()
     db.refresh(order)

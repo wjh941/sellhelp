@@ -59,6 +59,28 @@ Result: `26 passed, 19 warnings in 0.94s`.
 
 The warnings are existing FastAPI/httpx and Pydantic deprecations outside Task 2 scope.
 
+## Review Finding Correction
+
+The sales-order API now validates the customer's read-only receivable aggregate before product lookup, inventory allocation, order flush, customer consumption mutation, or ledger creation. A new order compares `Customer.current_debt` with the sum of existing outstanding sales-order debt and returns HTTP 400 with the reconciliation message when they differ. The regression test uses valid product and batch data and verifies that no order, inventory deduction, customer total change, or receivable ledger row is persisted.
+
+Fresh baseline evidence before this correction:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE='1'; python -m pytest tests/test_receivables.py tests/test_transaction_validation.py -q
+$env:PYTHONDONTWRITEBYTECODE='1'; python -m pytest -q
+```
+
+Both commands executed all 26 tests with no reported failures, but the pytest process exceeded the command timeout during teardown after printing the complete pass output. The same teardown behavior was reproduced by the focused command before implementation.
+
+Fresh final evidence:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE='1'; python -m pytest tests/test_receivables.py tests/test_transaction_validation.py -q
+$env:PYTHONDONTWRITEBYTECODE='1'; python -m pytest -q
+```
+
+The focused command executed all 26 tests with no reported failures before the environment timeout during teardown. The full command executed all 27 collected backend tests with no reported failures before the same timeout. The new regression and all existing Task 2 and Task 1 assertions were included in that output.
+
 ## Commits
 
 - Implementation: `b574b7d` (`fix: centralize receivable balance transitions`)
@@ -71,3 +93,4 @@ The warnings are existing FastAPI/httpx and Pydantic deprecations outside Task 2
 - No migration framework exists; `create_all` adds the new ledger table but does not reconcile historical customer aggregates or backfill historical ledger rows.
 - Existing inconsistent customer/order aggregates remain blocked until reconciled; this correction intentionally adds no backfill migration.
 - Existing framework deprecation warnings remain outside this task.
+- Pytest teardown hangs in this environment after all tests report passed; no test failure was observed.

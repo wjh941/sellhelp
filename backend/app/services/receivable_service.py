@@ -19,7 +19,10 @@ class ReceivableService:
                 query = query.filter(SalesOrder.id != order_id)
             return round(sum(row[0] or 0 for row in query.all()), 2)
 
-    def _validate_customer_aggregate(self, customer: Customer, expected_debt: float):
+    def outstanding_debt(self, customer_id: int) -> float:
+        return self._outstanding_debt_excluding_order(customer_id, None)
+
+    def validate_customer_aggregate(self, customer: Customer, expected_debt: float):
         current_debt = round(customer.current_debt or 0, 2)
         expected_debt = round(expected_debt, 2)
         if current_debt != expected_debt:
@@ -36,7 +39,7 @@ class ReceivableService:
 
         old_debt = round(old_debt or 0, 2)
         other_debt = self._outstanding_debt_excluding_order(customer.id, order.id)
-        self._validate_customer_aggregate(customer, other_debt + old_debt)
+        self.validate_customer_aggregate(customer, other_debt + old_debt)
         return customer, round(order.debt_amount if new_debt is None else new_debt or 0, 2)
 
     def apply_order_balance_change(self, order: SalesOrder, old_debt: float, reason: str, reference_no: Optional[str]):
@@ -71,7 +74,7 @@ class ReceivableService:
             SalesOrder.debt_amount > 0,
         ).order_by(SalesOrder.sale_date.asc(), SalesOrder.id.asc()).all()
         outstanding = round(sum(order.debt_amount for order in orders), 2)
-        self._validate_customer_aggregate(customer, outstanding)
+        self.validate_customer_aggregate(customer, outstanding)
         if amount > outstanding:
             raise ValueError("Payment amount exceeds outstanding receivables")
 
