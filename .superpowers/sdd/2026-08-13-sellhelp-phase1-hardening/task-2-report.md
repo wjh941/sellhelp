@@ -94,3 +94,15 @@ The focused command executed all 26 tests with no reported failures before the e
 - Existing inconsistent customer/order aggregates remain blocked until reconciled; this correction intentionally adds no backfill migration.
 - Existing framework deprecation warnings remain outside this task.
 - Pytest teardown hangs in this environment after all tests report passed; no test failure was observed.
+
+## Test Fixture Lifecycle Correction
+
+**Date:** 2026-08-13
+
+**Root cause:** `backend/tests/conftest.py` had independent `client` and `db_session` fixtures. Each created a separate in-memory SQLite engine and assigned `app.dependency_overrides[get_db]`; when tests requested both, fixture teardown coupled the two global overrides and database lifecycles. Assertions could pass while teardown hung.
+
+**Baseline evidence:** The focused test printed `. [100%]` but exceeded the bounded 12-second process timeout with exit `124`, confirming a teardown hang after assertions passed.
+
+**Correction:** `client` now depends on `db_session` and only owns the `TestClient` context. `db_session` is the single owner of the in-memory engine, schema, shared session, dependency override, and cleanup. No second engine or nested override clearing remains.
+
+**Final evidence:** The focused regression command completed with `1 passed in 0.15s` and exit `0` under the bounded verification run. The full suite is intentionally deferred to the parent process per task instruction.
