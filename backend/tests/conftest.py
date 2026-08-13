@@ -12,6 +12,8 @@ BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
+os.environ["SELLHELP_DATABASE_URL"] = "sqlite://"
+
 from app.database import get_db
 from app.main import app
 from app.models.all_models import Base

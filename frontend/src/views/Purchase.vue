@@ -101,12 +101,12 @@
           </el-table-column>
           <el-table-column label="数量" width="100">
             <template #default="{ row }">
-              <el-input-number v-model="row.quantity" :min="0" size="small" style="width: 100%;" />
+              <el-input-number v-model="row.quantity" :min="1" size="small" style="width: 100%;" />
             </template>
           </el-table-column>
           <el-table-column label="单价" width="100">
             <template #default="{ row }">
-              <el-input-number v-model="row.unit_price" :min="0" :precision="2" size="small" style="width: 100%;" />
+              <el-input-number v-model="row.unit_price" :min="0.01" :precision="2" size="small" style="width: 100%;" />
             </template>
           </el-table-column>
           <el-table-column label="金额" width="100">
@@ -192,7 +192,7 @@ const currentOrder = ref(null)
 
 const defaultItem = () => ({
   product_id: null, batch_no: '', production_date: null,
-  expiry_date: null, quantity: 0, unit_price: 0, remark: ''
+  expiry_date: null, quantity: 1, unit_price: 1, remark: ''
 })
 
 const newOrder = reactive({
@@ -264,6 +264,10 @@ const submitOrder = async () => {
   const validItems = newOrder.items.filter(i => i.product_id)
   if (!validItems.length) {
     ElMessage.warning('请至少添加一条商品')
+    return
+  }
+  if (validItems.some(i => i.quantity <= 0 || i.unit_price <= 0)) {
+    ElMessage.warning('数量和单价必须大于0')
     return
   }
 

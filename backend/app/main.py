@@ -10,8 +10,7 @@ import sys
 # 确保项目根目录在路径中
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.database import init_db, engine
-from app.models.all_models import Base
+from app.database import init_db
 
 # 导入所有路由
 from app.routers.product_router import router as product_router
@@ -27,9 +26,6 @@ from app.routers.export_router import router as export_router
 from app.routers.finance_router import router as finance_router
 from app.routers.system_router import router as system_router
 
-# 创建数据库表
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI(
     title="盈泰副食贸易管理系统",
     description="专为东莞高埗新联综合市场盈泰副食贸易部定制的完整商业经营管理系统",
@@ -37,6 +33,11 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+
+@app.on_event("startup")
+def initialize_database():
+    init_db()
 
 # CORS配置 - 允许前端访问
 app.add_middleware(
