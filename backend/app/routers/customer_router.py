@@ -10,6 +10,7 @@ from ..schemas.all_schemas import (
     CustomerCreate, CustomerUpdate, CustomerResponse, MessageResponse
 )
 from datetime import datetime
+from ..services.receivable_service import ReceivableService
 
 router = APIRouter(prefix="/api/customers", tags=["客户管理"])
 
@@ -127,7 +128,10 @@ def pay_customer_debt(
     if amount > customer.current_debt:
         raise HTTPException(status_code=400, detail=f"还款金额超过欠款，当前欠款¥{customer.current_debt:.2f}")
 
-    customer.current_debt -= amount
+    try:
+        ReceivableService(db).apply_payment(customer, amount, None, "customer payment")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
     db.refresh(customer)
     return customer

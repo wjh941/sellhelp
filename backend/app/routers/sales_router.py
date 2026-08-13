@@ -15,6 +15,7 @@ from ..schemas.all_schemas import (
     SalesOrderCreate, SalesOrderResponse, SalesOrderPay, SalesItemResponse, MessageResponse
 )
 from ..services.inventory_service import InventoryService
+from ..services.receivable_service import ReceivableService
 
 router = APIRouter(prefix="/api/sales-orders", tags=["销售管理"])
 
@@ -229,10 +230,9 @@ def create_sales_order(data: SalesOrderCreate, db: Session = Depends(get_db)):
             quantity=item_data["quantity"]
         )
 
-    # 自动更新客户累计消费和欠款
+    # Automatically update customer consumption and receivable balance.
     customer.total_consumption += total_amount
-    if debt_amount > 0:
-        customer.current_debt += debt_amount
+    ReceivableService(db).apply_order_balance_change(order, 0, "sales_order_created", order.order_no)
 
     db.commit()
     db.refresh(order)
@@ -252,6 +252,7 @@ def update_payment(order_id: int, pay_data: SalesOrderPay, db: Session = Depends
 
     customer = db.query(Customer).filter(Customer.id == order.customer_id).first()
 
+    old_debt = order.debt_amount
     if pay_data.payment_type == "现结":
         order.payment_type = "现结"
         order.paid_amount = order.final_amount
@@ -261,9 +262,6 @@ def update_payment(order_id: int, pay_data: SalesOrderPay, db: Session = Depends
         order.payment_type = "赊账"
         order.paid_amount = 0
         order.debt_amount = order.final_amount
-        # 增加客户欠款
-        if customer:
-            customer.current_debt += order.final_amount
 
     elif pay_data.payment_type == "部分结账":
         paid = pay_data.paid_amount or 0
@@ -272,9 +270,7 @@ def update_payment(order_id: int, pay_data: SalesOrderPay, db: Session = Depends
         order.payment_type = "部分结账"
         order.paid_amount = paid
         order.debt_amount = order.final_amount - paid
-        # 部分增加欠款
-        if customer and order.debt_amount > 0:
-            customer.current_debt += order.debt_amount
+    ReceivableService(db).apply_order_balance_change(order, old_debt, "sales_payment_changed", order.order_no)
 
     db.commit()
     db.refresh(order)
@@ -296,14 +292,13 @@ def complete_payment(order_id: int, db: Session = Depends(get_db)):
 
     customer = db.query(Customer).filter(Customer.id == order.customer_id).first()
 
+    old_debt = order.debt_amount
     order.payment_type = "现结"
     order.paid_amount = order.final_amount
     order.debt_amount = 0
     order.status = "已完成"
 
-    # 减少客户欠款
-    if customer:
-        customer.current_debt = max(0, customer.current_debt - order.debt_amount)
+    ReceivableService(db).apply_order_balance_change(order, old_debt, "sales_payment_completed", order.order_no)
 
     db.commit()
     db.refresh(order)
@@ -333,9 +328,9 @@ def delete_sales_order(order_id: int, db: Session = Depends(get_db)):
     customer = db.query(Customer).filter(Customer.id == order.customer_id).first()
     if customer:
         customer.total_consumption = max(0, customer.total_consumption - order.final_amount)
-        # 如果有赊账，也要冲回
-        if order.debt_amount > 0 and order.debt_amount == order.final_amount:
-            customer.current_debt -= order.debt_amount
+        old_debt = order.debt_amount
+        order.debt_amount = 0
+        ReceivableService(db).apply_order_balance_change(order, old_debt, "sales_order_deleted", order.order_no)
 
     # 删除订单明细
     for item in order.items:

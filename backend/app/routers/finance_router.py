@@ -9,6 +9,7 @@ from datetime import datetime, date, timedelta
 from ..database import get_db
 from ..models.all_models import Customer, SalesOrder, SalesOrderItem
 from ..schemas.all_schemas import MessageResponse
+from ..services.receivable_service import ReceivableService
 
 router = APIRouter(prefix="/api/finance", tags=["财务管理"])
 
@@ -117,33 +118,10 @@ def repay_customer_debt(
     if amount > customer.current_debt:
         raise HTTPException(status_code=400, detail=f"还款金额超过欠款，当前欠款¥{customer.current_debt:.2f}")
 
-    customer.current_debt -= amount
-
-    # 自动冲销最早的欠款订单
-    remaining = amount
-    debt_orders = db.query(SalesOrder).filter(
-        SalesOrder.customer_id == customer_id,
-        SalesOrder.debt_amount > 0
-    ).order_by(SalesOrder.sale_date.asc()).all()
-
-    for order in debt_orders:
-        if remaining <= 0:
-            break
-        if order.debt_amount <= remaining:
-            # 全额结清此订单
-            remaining -= order.debt_amount
-            order.paid_amount = order.final_amount
-            order.debt_amount = 0
-            order.payment_type = "现结"
-            order.status = "已完成"
-        else:
-            # 部分还款
-            order.paid_amount += remaining
-            order.debt_amount -= remaining
-            remaining = 0
-            if order.debt_amount == 0:
-                order.payment_type = "现结"
-                order.status = "已完成"
+    try:
+        ReceivableService(db).apply_payment(customer, amount, None, remark)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     db.commit()
     db.refresh(customer)
@@ -295,33 +273,14 @@ def batch_repay(
             results.append({"customer_id": customer_id, "status": "error", "message": "客户不存在"})
             continue
 
-        if amount > customer.current_debt:
-            actual_amount = customer.current_debt
-        else:
-            actual_amount = amount
-
-        customer.current_debt -= actual_amount
-
-        # 冲销欠款订单
-        remaining = actual_amount
-        debt_orders = db.query(SalesOrder).filter(
-            SalesOrder.customer_id == customer_id,
-            SalesOrder.debt_amount > 0
-        ).order_by(SalesOrder.sale_date.asc()).all()
-
-        for order in debt_orders:
-            if remaining <= 0:
-                break
-            if order.debt_amount <= remaining:
-                remaining -= order.debt_amount
-                order.paid_amount = order.final_amount
-                order.debt_amount = 0
-                order.payment_type = "现结"
-                order.status = "已完成"
-            else:
-                order.paid_amount += remaining
-                order.debt_amount -= remaining
-                remaining = 0
+        actual_amount = min(amount, customer.current_debt)
+        if actual_amount <= 0:
+            continue
+        try:
+            ReceivableService(db).apply_payment(customer, actual_amount, None, "batch repayment")
+        except ValueError as exc:
+            results.append({"customer_id": customer_id, "status": "error", "message": str(exc)})
+            continue
 
         results.append({
             "customer_id": customer_id,

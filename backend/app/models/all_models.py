@@ -99,6 +99,7 @@ class Customer(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     sales_orders = relationship("SalesOrder", back_populates="customer")
+    receivable_ledgers = relationship("ReceivableLedger", back_populates="customer")
 
 
 # ========== 模块2：批次入库系统 ==========
@@ -207,6 +208,23 @@ class SalesOrder(Base):
 
     customer = relationship("Customer", back_populates="sales_orders")
     items = relationship("SalesOrderItem", back_populates="sales_order", cascade="all, delete-orphan")
+    receivable_ledgers = relationship("ReceivableLedger", back_populates="sales_order")
+
+
+class ReceivableLedger(Base):
+    __tablename__ = "receivable_ledgers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
+    sales_order_id = Column(Integer, ForeignKey("sales_orders.id", ondelete="SET NULL"), index=True)
+    amount = Column(Float, nullable=False, comment="Signed receivable balance movement")
+    reason = Column(String(50), nullable=False)
+    reference_no = Column(String(50), index=True)
+    remark = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+    customer = relationship("Customer", back_populates="receivable_ledgers")
+    sales_order = relationship("SalesOrder", back_populates="receivable_ledgers")
 
 
 class SalesOrderItem(Base):
