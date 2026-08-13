@@ -77,3 +77,5 @@ Output: `13 passed, 18 warnings` for both. The full-suite command also compared 
 ### Residual Risk
 
 The FastAPI `on_event("startup")` hook introduces an additional framework deprecation warning; migration to FastAPI lifespan handlers is intentionally out of scope. Existing TestClient and Pydantic v2 deprecation warnings remain.
+
+Corrective commit: `17e7d6f062988dad6fcb3f6a8b075e0bbfc292bb` (`fix: isolate pytest database initialization`).
