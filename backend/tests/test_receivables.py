@@ -139,3 +139,102 @@ def test_deleting_credit_order_reverses_customer_debt_once(client, db_session):
     assert response.status_code == 200
     assert db_session.get(Customer, customer.id).current_debt == pytest.approx(0)
     assert ledger_movements(db_session) == [-100]
+
+
+def test_customer_delete_rejects_customer_with_receivable_ledger_history(client, db_session):
+    customer = Customer(name="historical customer", current_debt=100)
+    db_session.add(customer)
+    db_session.flush()
+    order = create_credit_order(db_session, customer, "SO-HISTORY", 100, datetime(2026, 1, 1))
+    db_session.commit()
+
+    assert client.delete(f"/api/sales-orders/{order.id}").status_code == 200
+
+    response = client.delete(f"/api/customers/{customer.id}")
+
+    assert response.status_code == 400
+    assert db_session.get(Customer, customer.id) is not None
+    assert db_session.query(ReceivableLedger).one().customer_id == customer.id
+
+
+def test_service_rejects_inconsistent_payment_without_dirty_session(db_session):
+    customer = Customer(name="inconsistent payment customer", current_debt=90)
+    db_session.add(customer)
+    db_session.flush()
+    order = create_credit_order(db_session, customer, "SO-INCONSISTENT-PAY", 100, datetime(2026, 1, 1))
+    db_session.commit()
+
+    with pytest.raises(ValueError, match="inconsistent"):
+        ReceivableService(db_session).apply_payment(customer, 10, None, "inconsistent payment")
+
+    db_session.commit()
+    db_session.expire_all()
+    persisted_order = db_session.get(SalesOrder, order.id)
+    persisted_customer = db_session.get(Customer, customer.id)
+    assert persisted_order.debt_amount == pytest.approx(100)
+    assert persisted_order.paid_amount == pytest.approx(0)
+    assert persisted_customer.current_debt == pytest.approx(90)
+    assert ledger_movements(db_session) == []
+
+
+def test_service_rejects_inconsistent_order_transition_before_mutation(db_session):
+    customer = Customer(name="inconsistent order customer", current_debt=90)
+    db_session.add(customer)
+    db_session.flush()
+    order = create_credit_order(db_session, customer, "SO-INCONSISTENT-ORDER", 100, datetime(2026, 1, 1))
+    db_session.commit()
+
+    with pytest.raises(ValueError, match="inconsistent"):
+        ReceivableService(db_session).apply_order_balance_change(order, 100, "test", order.order_no)
+
+    db_session.commit()
+    db_session.expire_all()
+    assert db_session.get(SalesOrder, order.id).debt_amount == pytest.approx(100)
+    assert db_session.get(Customer, customer.id).current_debt == pytest.approx(90)
+    assert ledger_movements(db_session) == []
+
+
+def test_batch_repayment_does_not_commit_inconsistent_customer_changes(client, db_session):
+    customer = Customer(name="inconsistent batch customer", current_debt=90)
+    db_session.add(customer)
+    db_session.flush()
+    order = create_credit_order(db_session, customer, "SO-INCONSISTENT-BATCH", 100, datetime(2026, 1, 1))
+    db_session.commit()
+
+    response = client.post("/api/finance/batch-repay", json={"items": [{"customer_id": customer.id, "amount": 10}]})
+
+    assert response.status_code == 200
+    assert response.json()["details"][0]["status"] == "error"
+    db_session.commit()
+    db_session.expire_all()
+    assert db_session.get(SalesOrder, order.id).debt_amount == pytest.approx(100)
+    assert db_session.get(Customer, customer.id).current_debt == pytest.approx(90)
+    assert ledger_movements(db_session) == []
+
+
+def test_payment_change_rejects_credit_limit_before_mutation(client, db_session):
+    customer = Customer(name="limited customer", credit_limit=50, current_debt=0)
+    db_session.add(customer)
+    db_session.flush()
+    order = SalesOrder(
+        order_no="SO-LIMIT",
+        customer_id=customer.id,
+        sale_date=datetime(2026, 1, 1),
+        total_amount=100,
+        final_amount=100,
+        payment_type=CASH,
+        paid_amount=100,
+        debt_amount=0,
+        status="已完成",
+    )
+    db_session.add(order)
+    db_session.commit()
+
+    response = client.post(f"/api/sales-orders/{order.id}/pay", json={"payment_type": CREDIT})
+
+    assert response.status_code == 400
+    db_session.expire_all()
+    assert db_session.get(SalesOrder, order.id).debt_amount == pytest.approx(0)
+    assert db_session.get(SalesOrder, order.id).payment_type == CASH
+    assert db_session.get(Customer, customer.id).current_debt == pytest.approx(0)
+    assert ledger_movements(db_session) == []

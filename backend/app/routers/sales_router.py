@@ -254,6 +254,27 @@ def update_payment(order_id: int, pay_data: SalesOrderPay, db: Session = Depends
 
     old_debt = order.debt_amount
     if pay_data.payment_type == "现结":
+        new_debt = 0
+    elif pay_data.payment_type == "赊账":
+        new_debt = order.final_amount
+    else:
+        paid = pay_data.paid_amount or 0
+        if paid < 0 or paid > order.final_amount:
+            raise HTTPException(status_code=400, detail="付款金额无效")
+        new_debt = order.final_amount - paid
+
+    try:
+        ReceivableService(db).validate_order_balance_change(order, old_debt, new_debt)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if new_debt > 0 and customer and customer.credit_limit > 0:
+        resulting_debt = round(customer.current_debt - old_debt + new_debt, 2)
+        if resulting_debt > customer.credit_limit:
+            raise HTTPException(status_code=400, detail=f"客户欠款将超过额度！变更后欠款¥{resulting_debt:.2f}，额度¥{customer.credit_limit:.2f}")
+
+    if pay_data.payment_type == "现结":
         order.payment_type = "现结"
         order.paid_amount = order.final_amount
         order.debt_amount = 0
@@ -265,12 +286,14 @@ def update_payment(order_id: int, pay_data: SalesOrderPay, db: Session = Depends
 
     elif pay_data.payment_type == "部分结账":
         paid = pay_data.paid_amount or 0
-        if paid < 0 or paid > order.final_amount:
-            raise HTTPException(status_code=400, detail="付款金额无效")
         order.payment_type = "部分结账"
         order.paid_amount = paid
         order.debt_amount = order.final_amount - paid
-    ReceivableService(db).apply_order_balance_change(order, old_debt, "sales_payment_changed", order.order_no)
+    try:
+        ReceivableService(db).apply_order_balance_change(order, old_debt, "sales_payment_changed", order.order_no)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
 
     db.commit()
     db.refresh(order)
@@ -293,12 +316,22 @@ def complete_payment(order_id: int, db: Session = Depends(get_db)):
     customer = db.query(Customer).filter(Customer.id == order.customer_id).first()
 
     old_debt = order.debt_amount
+    try:
+        ReceivableService(db).validate_order_balance_change(order, old_debt, 0)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+
     order.payment_type = "现结"
     order.paid_amount = order.final_amount
     order.debt_amount = 0
     order.status = "已完成"
 
-    ReceivableService(db).apply_order_balance_change(order, old_debt, "sales_payment_completed", order.order_no)
+    try:
+        ReceivableService(db).apply_order_balance_change(order, old_debt, "sales_payment_completed", order.order_no)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
 
     db.commit()
     db.refresh(order)
@@ -329,8 +362,17 @@ def delete_sales_order(order_id: int, db: Session = Depends(get_db)):
     if customer:
         customer.total_consumption = max(0, customer.total_consumption - order.final_amount)
         old_debt = order.debt_amount
+        try:
+            ReceivableService(db).validate_order_balance_change(order, old_debt, 0)
+        except ValueError as exc:
+            db.rollback()
+            raise HTTPException(status_code=400, detail=str(exc))
         order.debt_amount = 0
-        ReceivableService(db).apply_order_balance_change(order, old_debt, "sales_order_deleted", order.order_no)
+        try:
+            ReceivableService(db).apply_order_balance_change(order, old_debt, "sales_order_deleted", order.order_no)
+        except ValueError as exc:
+            db.rollback()
+            raise HTTPException(status_code=400, detail=str(exc))
 
     # 删除订单明细
     for item in order.items:

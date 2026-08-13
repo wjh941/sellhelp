@@ -121,6 +121,7 @@ def repay_customer_debt(
     try:
         ReceivableService(db).apply_payment(customer, amount, None, remark)
     except ValueError as exc:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(exc))
 
     db.commit()
@@ -277,7 +278,8 @@ def batch_repay(
         if actual_amount <= 0:
             continue
         try:
-            ReceivableService(db).apply_payment(customer, actual_amount, None, "batch repayment")
+            with db.begin_nested():
+                ReceivableService(db).apply_payment(customer, actual_amount, None, "batch repayment")
         except ValueError as exc:
             results.append({"customer_id": customer_id, "status": "error", "message": str(exc)})
             continue

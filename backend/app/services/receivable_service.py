@@ -9,14 +9,43 @@ class ReceivableService:
     def __init__(self, db: Session):
         self.db = db
 
-    def apply_order_balance_change(self, order: SalesOrder, old_debt: float, reason: str, reference_no: Optional[str]):
-        delta = round((order.debt_amount or 0) - (old_debt or 0), 2)
-        if delta == 0:
-            return None
+    def _outstanding_debt_excluding_order(self, customer_id: int, order_id: Optional[int]) -> float:
+        with self.db.no_autoflush:
+            query = self.db.query(SalesOrder.debt_amount).filter(
+                SalesOrder.customer_id == customer_id,
+                SalesOrder.debt_amount > 0,
+            )
+            if order_id is not None:
+                query = query.filter(SalesOrder.id != order_id)
+            return round(sum(row[0] or 0 for row in query.all()), 2)
 
+    def _validate_customer_aggregate(self, customer: Customer, expected_debt: float):
+        current_debt = round(customer.current_debt or 0, 2)
+        expected_debt = round(expected_debt, 2)
+        if current_debt != expected_debt:
+            raise ValueError(
+                "Customer receivable aggregate is inconsistent: "
+                f"current_debt={current_debt:.2f}, outstanding_order_debt={expected_debt:.2f}; "
+                "reconcile before changing receivables"
+            )
+
+    def validate_order_balance_change(self, order: SalesOrder, old_debt: float, new_debt: Optional[float] = None):
         customer = order.customer or self.db.get(Customer, order.customer_id)
         if not customer:
             raise ValueError("Customer does not exist")
+
+        old_debt = round(old_debt or 0, 2)
+        other_debt = self._outstanding_debt_excluding_order(customer.id, order.id)
+        self._validate_customer_aggregate(customer, other_debt + old_debt)
+        return customer, round(order.debt_amount if new_debt is None else new_debt or 0, 2)
+
+    def apply_order_balance_change(self, order: SalesOrder, old_debt: float, reason: str, reference_no: Optional[str]):
+        customer, new_debt = self.validate_order_balance_change(order, old_debt)
+        old_debt = round(old_debt or 0, 2)
+
+        delta = round(new_debt - old_debt, 2)
+        if delta == 0:
+            return None
 
         customer.current_debt = round((customer.current_debt or 0) + delta, 2)
         if customer.current_debt < 0:
@@ -42,6 +71,7 @@ class ReceivableService:
             SalesOrder.debt_amount > 0,
         ).order_by(SalesOrder.sale_date.asc(), SalesOrder.id.asc()).all()
         outstanding = round(sum(order.debt_amount for order in orders), 2)
+        self._validate_customer_aggregate(customer, outstanding)
         if amount > outstanding:
             raise ValueError("Payment amount exceeds outstanding receivables")
 

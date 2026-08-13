@@ -76,6 +76,8 @@ def delete_customer(customer_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="客户不存在")
     if customer.sales_orders:
         raise HTTPException(status_code=400, detail="该客户有销售记录，无法删除")
+    if customer.receivable_ledgers:
+        raise HTTPException(status_code=400, detail="该客户有应收账款历史，无法删除")
     if customer.current_debt > 0:
         raise HTTPException(status_code=400, detail="客户还有欠款，无法删除")
     db.delete(customer)
@@ -131,6 +133,7 @@ def pay_customer_debt(
     try:
         ReceivableService(db).apply_payment(customer, amount, None, "customer payment")
     except ValueError as exc:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
     db.refresh(customer)
