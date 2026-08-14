@@ -2,6 +2,7 @@
 退货与盘点 API路由
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, date
@@ -9,13 +10,14 @@ import uuid
 
 from ..database import get_db
 from ..models.all_models import (
-    ReturnOrder, StockTake, Product, ProductBatch, SalesOrder, SalesOrderItem
+    Customer, ReturnOrder, StockTake, Product, ProductBatch, SalesOrder, SalesOrderItem
 )
 from ..schemas.all_schemas import (
     ReturnOrderCreate, ReturnOrderResponse,
     StockTakeItemCreate, StockTakeResponse, MessageResponse
 )
 from ..services.inventory_service import InventoryService
+from ..services.receivable_service import ReceivableService
 
 router = APIRouter(prefix="/api", tags=["退货盘点"])
 
@@ -71,6 +73,38 @@ def create_return(data: ReturnOrderCreate, db: Session = Depends(get_db)):
     if not product:
         raise HTTPException(status_code=400, detail="商品不存在")
 
+    sale_order = None
+    refund_amount = data.refund_amount
+    if data.return_type == "\u5ba2\u6237\u9000\u8d27":
+        customer = db.get(Customer, data.partner_id) if data.partner_id else None
+        if not customer:
+            raise HTTPException(status_code=400, detail="\u5ba2\u6237\u4e0d\u5b58\u5728")
+        if not data.related_order_no:
+            raise HTTPException(status_code=400, detail="\u5ba2\u6237\u9000\u8d27\u5fc5\u987b\u5173\u8054\u539f\u9500\u552e\u5355")
+
+        sale_order = db.query(SalesOrder).filter(SalesOrder.order_no == data.related_order_no).first()
+        if not sale_order:
+            raise HTTPException(status_code=400, detail="\u539f\u9500\u552e\u5355\u4e0d\u5b58\u5728")
+        if sale_order.customer_id != customer.id:
+            raise HTTPException(status_code=400, detail="\u539f\u9500\u552e\u5355\u4e0e\u5ba2\u6237\u4e0d\u5339\u914d")
+
+        source_items = db.query(SalesOrderItem).filter(
+            SalesOrderItem.sales_order_id == sale_order.id,
+            SalesOrderItem.product_id == product.id,
+        ).all()
+        sold_quantity = sum(item.quantity for item in source_items)
+        if not sold_quantity:
+            raise HTTPException(status_code=400, detail="\u9000\u8d27\u5546\u54c1\u4e0d\u5728\u539f\u9500\u552e\u5355\u4e2d")
+        sold_amount = sum(item.amount for item in source_items)
+        returned_quantity = db.query(func.coalesce(func.sum(ReturnOrder.quantity), 0)).filter(
+            ReturnOrder.return_type == "\u5ba2\u6237\u9000\u8d27",
+            ReturnOrder.related_order_no == sale_order.order_no,
+            ReturnOrder.product_id == product.id,
+        ).scalar()
+        if data.quantity > sold_quantity - (returned_quantity or 0):
+            raise HTTPException(status_code=400, detail="\u9000\u8d27\u6570\u91cf\u8d85\u8fc7\u539f\u5355\u53ef\u9000\u6570\u91cf")
+        refund_amount = round(data.quantity * sold_amount / sold_quantity, 2)
+
     inventory_service = InventoryService(db)
     selected_batch = None
     if data.batch_id is not None:
@@ -80,30 +114,12 @@ def create_return(data: ReturnOrderCreate, db: Session = Depends(get_db)):
         if selected_batch.product_id != product.id:
             raise HTTPException(status_code=400, detail="批次不属于该商品")
 
-    # 客户退货：先检查是否有原销售单
     selected_batch_id = data.batch_id
     supplier_allocations = []
-    if data.return_type == "客户退货" and data.related_order_no:
-        sale_order = db.query(SalesOrder).filter(SalesOrder.order_no == data.related_order_no).first()
-        if sale_order:
-            if data.batch_id:
-                inventory_service.return_to_batch(data.batch_id, data.quantity)
-                selected_batch_id = data.batch_id
-            else:
-                # 如果未指定批次，创建新批次记录
-                new_batch = ProductBatch(
-                    product_id=product.id,
-                    batch_no=f"RET-{datetime.now().strftime('%Y%m%d%H%M%S')}",
-                    purchase_price=product.purchase_price or 0,
-                    total_quantity=data.quantity,
-                    remaining_quantity=data.quantity,
-                    remark="客户退货入库"
-                )
-                db.add(new_batch)
-                db.flush()
-                selected_batch_id = new_batch.id
+    if data.return_type == "客户退货":
+        if data.batch_id:
+            inventory_service.return_to_batch(data.batch_id, data.quantity)
         else:
-            # 无原单，直接入库
             new_batch = ProductBatch(
                 product_id=product.id,
                 batch_no=f"RET-{datetime.now().strftime('%Y%m%d%H%M%S')}",
@@ -143,14 +159,21 @@ def create_return(data: ReturnOrderCreate, db: Session = Depends(get_db)):
         related_order_no=data.related_order_no,
         partner_id=data.partner_id,
         product_id=data.product_id,
-        batch_id=data.batch_id,
+        batch_id=selected_batch_id,
         quantity=data.quantity,
-        refund_amount=data.refund_amount,
+        refund_amount=refund_amount,
         reason=data.reason,
         operator=data.operator
     )
     db.add(return_order)
     db.flush()
+    if sale_order is not None:
+        old_debt = sale_order.debt_amount
+        sale_order.debt_amount = round(max(0, old_debt - refund_amount), 2)
+        if sale_order.debt_amount != old_debt:
+            ReceivableService(db).apply_order_balance_change(
+                sale_order, old_debt, "customer_return", return_order.order_no,
+            )
     if data.return_type == "客户退货":
         inventory_service = InventoryService(db)
         inventory_service.record_movement(

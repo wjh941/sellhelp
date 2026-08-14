@@ -314,7 +314,7 @@ def test_supplier_return_without_batch_can_span_saleable_batches(client, db_sess
     assert [row.quantity for row in movement_rows(db_session, product_id=product.id)] == [1, 2]
 
 
-def test_customer_return_and_confirmed_stocktake_record_movements(client, db_session):
+def test_unlinked_customer_return_is_rejected_before_stocktake(client, db_session):
     product, customer, _, batch = make_product(db_session, quantity=5)
 
     returned = client.post(
@@ -329,7 +329,7 @@ def test_customer_return_and_confirmed_stocktake_record_movements(client, db_ses
             "operator": "seller",
         },
     )
-    assert returned.status_code == 200
+    assert returned.status_code == 400
 
     stocktake = client.post(
         "/api/stock-takes/confirm",
@@ -343,13 +343,12 @@ def test_customer_return_and_confirmed_stocktake_record_movements(client, db_ses
     assert stocktake.status_code == 200
     rows = movement_rows(db_session, product_id=product.id)
     assert [(row.direction, row.quantity, row.reason) for row in rows] == [
-        ("inbound", 2, "customer_return"),
         ("inbound", 1, "stocktake_adjustment"),
     ]
 
 
-def test_customer_return_without_related_order_creates_real_batch(client, db_session):
-    product, customer, _, _ = make_product(db_session)
+def test_customer_return_without_related_order_is_rejected_without_inventory_mutation(client, db_session):
+    product, customer, _, batch = make_product(db_session)
 
     response = client.post(
         "/api/returns",
@@ -362,14 +361,10 @@ def test_customer_return_without_related_order_creates_real_batch(client, db_ses
         },
     )
 
-    assert response.status_code == 200
-    return_order = db_session.query(ReturnOrder).one()
-    assert return_order.batch_id is not None
-    batch = db_session.get(ProductBatch, return_order.batch_id)
-    assert batch is not None
-    assert batch.product_id == product.id
-    assert batch.remaining_quantity == pytest.approx(1)
-    assert movement_rows(db_session, product_id=product.id)[0].batch_id == batch.id
+    assert response.status_code == 400
+    assert db_session.query(ReturnOrder).count() == 0
+    assert db_session.get(ProductBatch, batch.id).remaining_quantity == pytest.approx(10)
+    assert movement_rows(db_session, product_id=product.id) == []
 
 
 @pytest.mark.parametrize("return_type", [CUSTOMER_RETURN, SUPPLIER_RETURN])
