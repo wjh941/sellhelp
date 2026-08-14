@@ -446,3 +446,52 @@ class ReportService:
     def get_reports_history(self, limit: int = 10) -> List[WeeklyReport]:
         """获取周报历史"""
         return self.db.query(WeeklyReport).order_by(WeeklyReport.created_at.desc()).limit(limit).all()
+
+    def get_dashboard_metrics(self, end_date: date | None = None) -> Dict:
+        """Return completed-sale dashboard aggregates without modifying data."""
+        end_date = end_date or date.today()
+        start_date = end_date - timedelta(days=6)
+        start_dt = datetime.combine(start_date, datetime.min.time())
+        end_dt = datetime.combine(end_date, datetime.max.time())
+
+        daily_rows = self.db.query(
+            func.date(SalesOrder.sale_date).label("sale_day"),
+            func.sum(SalesOrder.final_amount).label("amount"),
+        ).filter(
+            SalesOrder.sale_date >= start_dt,
+            SalesOrder.sale_date <= end_dt,
+            SalesOrder.status == "\u5df2\u5b8c\u6210",
+        ).group_by(func.date(SalesOrder.sale_date)).all()
+        amounts = {date.fromisoformat(row.sale_day): float(row.amount or 0) for row in daily_rows}
+
+        top_rows = self.db.query(
+            SalesOrderItem.product_id,
+            Product.name.label("product_name"),
+            func.sum(SalesOrderItem.amount).label("amount"),
+        ).join(
+            SalesOrder, SalesOrderItem.sales_order_id == SalesOrder.id,
+        ).join(
+            Product, SalesOrderItem.product_id == Product.id,
+        ).filter(
+            SalesOrder.sale_date >= start_dt,
+            SalesOrder.sale_date <= end_dt,
+            SalesOrder.status == "\u5df2\u5b8c\u6210",
+        ).group_by(
+            SalesOrderItem.product_id, Product.name,
+        ).order_by(desc("amount")).limit(5).all()
+
+        days = [start_date + timedelta(days=offset) for offset in range(7)]
+        return {
+            "daily_sales": [
+                {"date": day.isoformat(), "amount": round(amounts.get(day, 0), 2)}
+                for day in days
+            ],
+            "top_products": [
+                {
+                    "product_id": row.product_id,
+                    "product_name": row.product_name,
+                    "amount": round(row.amount, 2),
+                }
+                for row in top_rows
+            ],
+        }

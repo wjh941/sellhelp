@@ -17,6 +17,14 @@ from ..services.ai_service import AIChatService
 
 router = APIRouter(prefix="/api", tags=["周报与AI顾问"])
 
+
+@router.get("/dashboard/metrics")
+def get_dashboard_metrics(
+    end_date: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    return ReportService(db).get_dashboard_metrics(end_date)
+
 # ========== 经营分析周报 ==========
 
 @router.post("/reports/generate", response_model=WeeklyReportResponse)

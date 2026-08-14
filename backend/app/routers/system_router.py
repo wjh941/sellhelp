@@ -10,27 +10,37 @@ from datetime import datetime, date, timedelta
 import os
 import shutil
 import json
+import re
 
 from ..database import get_db, DB_PATH
 from ..models.all_models import Product, ProductBatch, SalesOrder, SalesOrderItem, SystemConfig, WeeklyReport
 
 router = APIRouter(prefix="/api/system", tags=["系统管理"])
 
+_BACKUP_FILENAME = re.compile(r"(?:yingtai_backup|pre_restore)_\d{8}_\d{6}\.db")
+
+
+def _backup_directory() -> str:
+    return os.path.join(os.path.dirname(DB_PATH), "backup")
+
+
+def _resolve_backup_file(filename: str) -> str:
+    if os.path.basename(filename) != filename or not _BACKUP_FILENAME.fullmatch(filename):
+        raise HTTPException(status_code=400, detail="Invalid backup filename")
+    return os.path.join(_backup_directory(), filename)
+
 
 # ========== 数据库备份 ==========
 
 @router.post("/backup")
 def backup_database(
-    backup_dir: Optional[str] = Query(None, description="备份目录，默认为数据库同级backup目录"),
     db: Session = Depends(get_db)
 ):
     """备份数据库"""
     if not os.path.exists(DB_PATH):
         raise HTTPException(status_code=404, detail="数据库文件不存在")
 
-    if not backup_dir:
-        backup_dir = os.path.join(os.path.dirname(DB_PATH), "backup")
-
+    backup_dir = _backup_directory()
     os.makedirs(backup_dir, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -70,12 +80,9 @@ def backup_database(
 
 @router.get("/backups")
 def list_backups(
-    backup_dir: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
 ):
     """列出所有备份"""
-    if not backup_dir:
-        backup_dir = os.path.join(os.path.dirname(DB_PATH), "backup")
+    backup_dir = _backup_directory()
 
     if not os.path.exists(backup_dir):
         return {"backups": [], "total_size": 0}
@@ -84,8 +91,10 @@ def list_backups(
     total_size = 0
 
     for filename in sorted(os.listdir(backup_dir), reverse=True):
-        if filename.endswith('.db') and filename.startswith('yingtai_backup'):
-            filepath = os.path.join(backup_dir, filename)
+        if _BACKUP_FILENAME.fullmatch(filename):
+            filepath = _resolve_backup_file(filename)
+            if not os.path.isfile(filepath):
+                continue
             size = os.path.getsize(filepath)
             total_size += size
             backups.append({
@@ -104,24 +113,16 @@ def list_backups(
 @router.post("/restore")
 def restore_database(
     backup_file: str = Query(..., description="备份文件名"),
-    backup_dir: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
 ):
     """恢复数据库"""
-    if not backup_dir:
-        backup_dir = os.path.join(os.path.dirname(DB_PATH), "backup")
-
-    backup_path = os.path.join(backup_dir, backup_file)
+    backup_path = _resolve_backup_file(backup_file)
     if not os.path.exists(backup_path):
         raise HTTPException(status_code=404, detail="备份文件不存在")
 
-    # 确认备份文件
-    if not backup_file.endswith('.db'):
-        raise HTTPException(status_code=400, detail="无效的备份文件")
-
     # 恢复前先备份当前数据库
+    pre_backup = None
     if os.path.exists(DB_PATH):
-        pre_backup = os.path.join(backup_dir, f"pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
+        pre_backup = _resolve_backup_file(f"pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
         shutil.copy2(DB_PATH, pre_backup)
 
     # 恢复
@@ -130,21 +131,16 @@ def restore_database(
     return {
         "message": "数据库恢复成功，请重启系统",
         "backup_file": backup_file,
-        "pre_restore_backup": pre_backup if os.path.exists(DB_PATH) else None
+        "pre_restore_backup": pre_backup
     }
 
 
-@router.delete("/backups/{filename}")
+@router.delete("/backups/{filename:path}")
 def delete_backup(
     filename: str,
-    backup_dir: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
 ):
     """删除备份"""
-    if not backup_dir:
-        backup_dir = os.path.join(os.path.dirname(DB_PATH), "backup")
-
-    backup_path = os.path.join(backup_dir, filename)
+    backup_path = _resolve_backup_file(filename)
     if not os.path.exists(backup_path):
         raise HTTPException(status_code=404, detail="备份文件不存在")
 
@@ -152,16 +148,12 @@ def delete_backup(
     return {"message": "删除成功"}
 
 
-@router.get("/backups/{filename}")
+@router.get("/backups/{filename:path}")
 def download_backup(
     filename: str,
-    backup_dir: Optional[str] = Query(None)
 ):
     """下载备份文件"""
-    if not backup_dir:
-        backup_dir = os.path.join(os.path.dirname(DB_PATH), "backup")
-
-    backup_path = os.path.join(backup_dir, filename)
+    backup_path = _resolve_backup_file(filename)
     if not os.path.exists(backup_path):
         raise HTTPException(status_code=404, detail="备份文件不存在")
 

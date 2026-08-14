@@ -111,10 +111,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, shallowRef } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import {
-  getStockSummary, getExpiryWarnings, getSalesOrders, getReports
+  getStockSummary, getExpiryWarnings, getSalesOrders, getDashboardMetrics
 } from '@/api'
 
 const stockSummary = ref({})
@@ -171,18 +171,20 @@ const loadData = async () => {
       (sales.items || sales).reduce((sum, o) => sum + (o.final_amount || 0), 0)
     )
 
+    const metrics = await getDashboardMetrics()
+
     // 欠款客户统计
     const customers = await (await import('@/api')).getCustomers({ has_debt: true })
     debtCount.value = Array.isArray(customers) ? customers.length : 0
 
     await nextTick()
-    initCharts(stock, warnings)
+    initCharts(stock, metrics)
   } catch (e) {
     console.error('加载数据失败:', e)
   }
 }
 
-const initCharts = (stock, warnings) => {
+const initCharts = (stock, metrics) => {
   // 分类饼图
   if (categoryChartRef.value) {
     categoryChart = echarts.init(categoryChartRef.value)
@@ -207,23 +209,15 @@ const initCharts = (stock, warnings) => {
   // 销售走势图（示例数据）
   if (salesChartRef.value) {
     salesChart = echarts.init(salesChartRef.value)
-    const days = []
-    const amounts = []
-    const today = new Date()
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(today)
-      d.setDate(d.getDate() - i)
-      days.push(`${d.getMonth() + 1}/${d.getDate()}`)
-      amounts.push(Math.round(Math.random() * 50000 + 20000))
-    }
+    const dailySales = metrics.daily_sales || []
 
     salesChart.setOption({
       tooltip: { trigger: 'axis' },
       grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-      xAxis: { type: 'category', data: days },
+      xAxis: { type: 'category', data: dailySales.map(item => item.date) },
       yAxis: { type: 'value', axisLabel: { formatter: '¥{value}' } },
       series: [{
-        data: amounts,
+        data: dailySales.map(item => item.amount),
         type: 'line',
         smooth: true,
         areaStyle: { opacity: 0.3 },
@@ -236,13 +230,14 @@ const initCharts = (stock, warnings) => {
   // 热销商品柱状图
   if (hotChartRef.value) {
     hotChart = echarts.init(hotChartRef.value)
+    const topProducts = metrics.top_products || []
     hotChart.setOption({
       tooltip: { trigger: 'axis' },
       grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-      xAxis: { type: 'category', data: ['粮油', '调味', '饮料', '零食', '礼盒'] },
-      yAxis: { type: 'value', name: '万元' },
+      xAxis: { type: 'category', data: topProducts.map(item => item.product_name) },
+      yAxis: { type: 'value' },
       series: [{
-        data: [8.5, 6.2, 4.8, 3.5, 2.1],
+        data: topProducts.map(item => item.amount),
         type: 'bar',
         itemStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [

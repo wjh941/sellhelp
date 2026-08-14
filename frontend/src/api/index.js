@@ -82,6 +82,7 @@ export const getPricingHistory = (params) => api.get('/pricing/history', { param
 export const confirmPricing = (referenceId, operator) => api.post(`/pricing/${referenceId}/confirm`, null, { params: { operator } })
 
 // ========== 周报 ==========
+export const getDashboardMetrics = () => api.get('/dashboard/metrics')
 export const generateReport = (params) => api.post('/reports/generate', null, { params })
 export const getLatestReport = () => api.get('/reports/latest')
 export const getReports = (params) => api.get('/reports', { params })

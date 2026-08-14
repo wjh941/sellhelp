@@ -34,6 +34,10 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+allowed_origins = [origin.strip() for origin in os.getenv(
+    "SELLHELP_ALLOWED_ORIGINS", "http://localhost:8080"
+).split(",") if origin.strip()]
+
 
 @app.on_event("startup")
 def initialize_database():
@@ -42,7 +46,7 @@ def initialize_database():
 # CORS配置 - 允许前端访问
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
