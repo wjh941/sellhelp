@@ -126,6 +126,7 @@ test('keeps the purchase draft local until a successful purchase submission clea
 test('purchase workspace keeps its batch entry safety contract', async () => {
   const source = await readFile(new URL('../src/views/Purchase.vue', import.meta.url), 'utf8')
   const clearDraft = source.match(/async function clearPurchaseDraft\(\) \{[\s\S]*?\n\}/)?.[0] || ''
+  const styles = source.slice(source.indexOf('<style scoped>'))
 
   assert.match(source, /<el-dialog[\s\S]*?draggable/)
   assert.match(source, /const draggedLineIndex\s*=\s*ref\(null\)/)
@@ -136,6 +137,16 @@ test('purchase workspace keeps its batch entry safety contract', async () => {
   assert.ok(clearDraft.indexOf('await nextTick()') < clearDraft.indexOf('removeKey(window.localStorage, UI_STORAGE_KEYS.purchaseDraft)'))
   assert.match(source, /createPurchaseOrder\(buildPurchasePayload\(newPurchase\)\)/)
   assert.doesNotMatch(source, /createPurchaseOrder\(newPurchase\)/)
+  assert.match(source, /const supplierError\s*=\s*computed/)
+  assert.match(source, /function lineErrors\(item\)/)
+  assert.match(source, /const hasPurchaseErrors\s*=\s*computed/)
+  assert.match(source, /:error="supplierError"/)
+  assert.match(source, /v-if="lineErrors\(item\)\.batchNo"/)
+  assert.match(source, /if \(hasPurchaseErrors\.value\)/)
+  assert.match(styles, /\.purchase-lines\s*\{[^}]*overflow-x:\s*auto;/)
+  assert.match(styles, /\.purchase-line\s*\{[^}]*min-width:\s*\d+px;/)
+  assert.match(styles, /\.purchase-workspace\s+:deep\(\.el-select__wrapper\),[\s\S]*?min-height:\s*42px;/)
+  assert.match(styles, /\.compact-form\s+:deep\(\.el-form-item__label\)\s*\{[^}]*font-size:\s*15px;/)
 })
 
 test('sales workspace keeps its create-order safety contract', async () => {

@@ -46,7 +46,7 @@
         <section class="purchase-column entry-column">
           <div class="column-heading"><span>1</span><div><h3>单据信息</h3><p>选择商品后将直接加入右侧批次明细</p></div></div>
           <el-form label-position="top" class="compact-form">
-            <el-form-item label="供应商" required>
+            <el-form-item label="供应商" required :error="supplierError">
               <el-select v-model="newPurchase.supplier_id" filterable clearable placeholder="输入供应商名称搜索">
                 <el-option v-for="supplier in suppliers" :key="supplier.id" :label="supplier.name" :value="supplier.id" />
               </el-select>
@@ -78,14 +78,31 @@
               @dragstart="draggedLineIndex = index" @dragover.prevent @drop="dropLine(index)">
               <el-icon class="drag-handle" aria-label="拖动排序"><Rank /></el-icon>
               <div class="line-product"><strong>{{ item.product_info?.name || '商品' }}</strong><small>批次 {{ item.batch_no || '待填写' }}</small></div>
-              <el-input v-model="item.batch_no" aria-label="批次号" placeholder="批次号" />
-              <el-date-picker v-model="item.production_date" type="date" value-format="YYYY-MM-DD" placeholder="生产日期" aria-label="生产日期" />
-              <div class="expiry-field">
+              <div class="line-field" :class="{ 'has-error': lineErrors(item).batchNo }">
+                <span class="line-field-label">批次号</span>
+                <el-input v-model="item.batch_no" aria-label="批次号" placeholder="批次号" :class="{ 'is-invalid': lineErrors(item).batchNo }" />
+                <p v-if="lineErrors(item).batchNo" class="field-error">{{ lineErrors(item).batchNo }}</p>
+              </div>
+              <div class="line-field">
+                <span class="line-field-label">生产日期</span>
+                <el-date-picker v-model="item.production_date" type="date" value-format="YYYY-MM-DD" placeholder="生产日期" aria-label="生产日期" />
+              </div>
+              <div class="expiry-field" :class="{ 'has-error': lineErrors(item).expiryDate }">
+                <span class="line-field-label">到期日期</span>
                 <el-date-picker v-model="item.expiry_date" type="date" value-format="YYYY-MM-DD" placeholder="到期日期" aria-label="到期日期" />
                 <el-tag :type="expiryStatus(item).type" effect="light">{{ expiryStatus(item).text }}</el-tag>
+                <p v-if="lineErrors(item).expiryDate" class="field-error">{{ lineErrors(item).expiryDate }}</p>
               </div>
-              <el-input-number v-model="item.quantity" :min="1" :precision="0" controls-position="right" aria-label="入库数量" />
-              <el-input-number v-model="item.unit_price" :min="0.01" :precision="2" controls-position="right" aria-label="入库单价" />
+              <div class="line-field" :class="{ 'has-error': lineErrors(item).quantity }">
+                <span class="line-field-label">数量</span>
+                <el-input-number v-model="item.quantity" :min="1" :precision="0" controls-position="right" aria-label="入库数量" />
+                <p v-if="lineErrors(item).quantity" class="field-error">{{ lineErrors(item).quantity }}</p>
+              </div>
+              <div class="line-field" :class="{ 'has-error': lineErrors(item).unitPrice }">
+                <span class="line-field-label">进价</span>
+                <el-input-number v-model="item.unit_price" :min="0.01" :precision="2" controls-position="right" aria-label="入库单价" />
+                <p v-if="lineErrors(item).unitPrice" class="field-error">{{ lineErrors(item).unitPrice }}</p>
+              </div>
               <strong class="line-amount">{{ formatMoney(lineAmount(item)) }}</strong>
               <el-button type="danger" link title="删除此批次明细" aria-label="删除此批次明细" @click="removeItem(index)">删除</el-button>
             </article>
@@ -162,6 +179,23 @@ const defaultPurchase = () => ({
 
 const newPurchase = reactive(defaultPurchase())
 const totalAmount = computed(() => newPurchase.items.reduce((sum, item) => sum + lineAmount(item), 0))
+const supplierError = computed(() => newPurchase.supplier_id ? '' : '请选择供应商')
+
+function lineErrors(item) {
+  const errors = { batchNo: '', quantity: '', unitPrice: '', expiryDate: '' }
+  if (!String(item.batch_no || '').trim()) errors.batchNo = '请填写批次号'
+  if (Number(item.quantity) <= 0) errors.quantity = '数量必须大于 0'
+  if (Number(item.unit_price) <= 0) errors.unitPrice = '进价必须大于 0'
+  if (item.production_date && item.expiry_date && String(item.expiry_date).slice(0, 10) < String(item.production_date).slice(0, 10)) {
+    errors.expiryDate = '到期日不能早于生产日'
+  }
+  return errors
+}
+
+const hasPurchaseErrors = computed(() => {
+  if (supplierError.value) return true
+  return newPurchase.items.some(item => Object.values(lineErrors(item)).some(Boolean))
+})
 
 function createLine(product) {
   return {
@@ -272,12 +306,12 @@ function dropLine(index) {
 }
 
 const submitOrder = async () => {
-  if (!newPurchase.supplier_id) {
-    ElMessage.warning('请选择供应商')
+  if (hasPurchaseErrors.value) {
+    ElMessage.warning('请先修正标红的入库信息')
     return
   }
-  if (!newPurchase.items.length || newPurchase.items.some(item => !item.product_id || Number(item.quantity) <= 0 || Number(item.unit_price) <= 0)) {
-    ElMessage.warning('请至少选择一件数量和进价均大于 0 的商品')
+  if (!newPurchase.items.length || newPurchase.items.some(item => !item.product_id)) {
+    ElMessage.warning('请至少选择一件商品')
     return
   }
   try {
@@ -345,20 +379,28 @@ onMounted(async () => {
 .column-heading h3 { margin: 0; color: var(--yt-text); font-size: 17px; }
 .column-heading p { margin: 3px 0 0; color: var(--yt-text-muted); font-size: 14px; line-height: 1.45; }
 .compact-form :deep(.el-form-item) { margin-bottom: 15px; }
+.compact-form :deep(.el-form-item__label) { font-size: 15px; }
 .compact-form :deep(.el-select), .compact-form :deep(.el-date-editor), .compact-form :deep(.el-input), .compact-form :deep(.el-textarea) { width: 100%; }
+.purchase-workspace :deep(.el-select__wrapper),
+.purchase-workspace :deep(.el-input__wrapper),
+.purchase-workspace :deep(.el-input-number) { min-height: 42px; font-size: 15px; }
+.purchase-workspace :deep(.el-input__inner) { font-size: 15px; }
 .product-option { display: flex; justify-content: space-between; gap: 12px; }
 .product-option small { color: var(--yt-text-muted); }
 .form-divider { height: 1px; margin: 20px 0; background: var(--yt-border); }
-.purchase-lines { display: grid; gap: 8px; max-height: 510px; overflow-y: auto; padding-right: 3px; }
-.purchase-line { display: grid; grid-template-columns: auto minmax(115px, 1fr) minmax(112px, .8fr) 138px minmax(144px, 1fr) 108px 108px 90px auto; align-items: center; gap: 9px; padding: 10px; border: 1px solid var(--yt-border); border-radius: 6px; cursor: grab; }
+.purchase-lines { display: grid; gap: 8px; max-height: 510px; overflow-x: auto; overflow-y: auto; padding-right: 3px; }
+.purchase-line { display: grid; min-width: 1140px; grid-template-columns: auto minmax(115px, 1fr) minmax(122px, .9fr) 138px minmax(144px, 1.05fr) 112px 112px 90px auto; align-items: start; gap: 9px; padding: 10px; border: 1px solid var(--yt-border); border-radius: 6px; cursor: grab; }
 .purchase-line:active { cursor: grabbing; }
 .drag-handle { color: var(--yt-text-muted); }
 .line-product { display: grid; min-width: 0; gap: 3px; }
 .line-product strong { overflow: hidden; color: var(--yt-text); text-overflow: ellipsis; white-space: nowrap; }
 .line-product small { color: var(--yt-text-muted); font-size: 12px; }
 .purchase-line :deep(.el-date-editor), .purchase-line :deep(.el-input-number), .purchase-line :deep(.el-input) { width: 100%; }
-.expiry-field { display: grid; gap: 5px; }
+.line-field, .expiry-field { display: grid; gap: 5px; min-width: 0; }
+.line-field-label { color: var(--yt-text-muted); font-size: 15px; line-height: 1.25; }
 .expiry-field :deep(.el-tag) { justify-self: start; }
+.field-error { min-height: 17px; margin: 0; color: var(--color-danger); font-size: 13px; line-height: 1.3; }
+.line-field.has-error :deep(.el-input__wrapper), .expiry-field.has-error :deep(.el-input__wrapper), .line-field.has-error :deep(.el-input-number) { box-shadow: 0 0 0 1px var(--color-danger) inset; }
 .line-amount { color: var(--yt-primary); text-align: right; }
 .totals-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; padding: 14px; border-radius: 6px; background: var(--yt-page); }
 .totals-panel div { display: grid; gap: 4px; }
