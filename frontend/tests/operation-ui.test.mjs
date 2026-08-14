@@ -67,12 +67,21 @@ test('defines complete Element Plus dark theme tokens', async () => {
   assert.match(darkTheme, /--el-bg-color-overlay: #2C313A;/)
   assert.match(darkTheme, /--el-fill-color: #2C313A;/)
   assert.match(darkTheme, /--el-fill-color-disabled: #2C313A;/)
-  for (const color of ['primary', 'success', 'warning', 'danger']) {
-    assert.match(styles, new RegExp(`--el-color-${color}-rgb:`))
-    assert.match(styles, new RegExp(`--el-color-${color}-dark-2:`))
-    for (const shade of [3, 5, 7, 8, 9]) {
-      assert.match(styles, new RegExp(`--el-color-${color}-light-${shade}:`))
+  const darkStatusTokens = {
+    primary: ['92, 145, 255', '#5C91FF', '#2F63C7', '#254A96', '#1D376B', '#192E58', '#152541', '#7AA6FF'],
+    success: ['69, 212, 131', '#45D483', '#278F59', '#246D46', '#1D5036', '#1A442F', '#173B2A', '#6BE09B'],
+    warning: ['255, 174, 87', '#FFAE57', '#B97031', '#8A572B', '#644020', '#53371D', '#463019', '#FFC477'],
+    danger: ['255, 120, 120', '#FF7878', '#B9474B', '#8A393D', '#652D31', '#54282B', '#472326', '#FF9696'],
+    error: ['255, 120, 120', '#FF7878', '#B9474B', '#8A393D', '#652D31', '#54282B', '#472326', '#FF9696'],
+  }
+
+  for (const [color, [rgb, base, light3, light5, light7, light8, light9, dark2]] of Object.entries(darkStatusTokens)) {
+    assert.match(darkTheme, new RegExp(`--el-color-${color}: ${base};`))
+    assert.match(darkTheme, new RegExp(`--el-color-${color}-rgb: ${rgb};`))
+    for (const [shade, value] of [[3, light3], [5, light5], [7, light7], [8, light8], [9, light9]]) {
+      assert.match(darkTheme, new RegExp(`--el-color-${color}-light-${shade}: ${value};`))
     }
+    assert.match(darkTheme, new RegExp(`--el-color-${color}-dark-2: ${dark2};`))
   }
 })
 
