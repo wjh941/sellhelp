@@ -149,6 +149,20 @@ test('purchase workspace keeps its batch entry safety contract', async () => {
   assert.match(styles, /\.compact-form\s+:deep\(\.el-form-item__label\)\s*\{[^}]*font-size:\s*15px;/)
 })
 
+test('purchase validation rejects non-finite quantity and unit price values', async () => {
+  const source = await readFile(new URL('../src/views/Purchase.vue', import.meta.url), 'utf8')
+  const predicateSource = source.match(/function isFinitePositive\(value\) \{[\s\S]*?\n\}/)?.[0]
+
+  assert.ok(predicateSource, 'Purchase.vue must define a finite-positive validator')
+  assert.match(predicateSource, /Number\.isFinite\(Number\(value\)\)\s*&&\s*Number\(value\)\s*>\s*0/)
+  const isFinitePositive = Function(`${predicateSource}; return isFinitePositive`)()
+
+  for (const value of [null, undefined, NaN, 'not-a-number', Infinity, 0, -1]) {
+    assert.equal(isFinitePositive(value), false, `expected ${String(value)} to be invalid`)
+  }
+  assert.equal(isFinitePositive('2.5'), true)
+})
+
 test('sales workspace keeps its create-order safety contract', async () => {
   const source = await readFile(new URL('../src/views/Sales.vue', import.meta.url), 'utf8')
 

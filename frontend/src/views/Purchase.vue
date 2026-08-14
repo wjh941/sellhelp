@@ -181,11 +181,15 @@ const newPurchase = reactive(defaultPurchase())
 const totalAmount = computed(() => newPurchase.items.reduce((sum, item) => sum + lineAmount(item), 0))
 const supplierError = computed(() => newPurchase.supplier_id ? '' : '请选择供应商')
 
+function isFinitePositive(value) {
+  return Number.isFinite(Number(value)) && Number(value) > 0
+}
+
 function lineErrors(item) {
   const errors = { batchNo: '', quantity: '', unitPrice: '', expiryDate: '' }
   if (!String(item.batch_no || '').trim()) errors.batchNo = '请填写批次号'
-  if (Number(item.quantity) <= 0) errors.quantity = '数量必须大于 0'
-  if (Number(item.unit_price) <= 0) errors.unitPrice = '进价必须大于 0'
+  if (!isFinitePositive(item.quantity)) errors.quantity = '数量必须大于 0'
+  if (!isFinitePositive(item.unit_price)) errors.unitPrice = '进价必须大于 0'
   if (item.production_date && item.expiry_date && String(item.expiry_date).slice(0, 10) < String(item.production_date).slice(0, 10)) {
     errors.expiryDate = '到期日不能早于生产日'
   }
@@ -194,7 +198,11 @@ function lineErrors(item) {
 
 const hasPurchaseErrors = computed(() => {
   if (supplierError.value) return true
-  return newPurchase.items.some(item => Object.values(lineErrors(item)).some(Boolean))
+  return newPurchase.items.some(item => (
+    !isFinitePositive(item.quantity) ||
+    !isFinitePositive(item.unit_price) ||
+    Object.values(lineErrors(item)).some(Boolean)
+  ))
 })
 
 function createLine(product) {
