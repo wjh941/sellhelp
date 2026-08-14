@@ -16,7 +16,7 @@ pip install -r backend/requirements.txt
 npm ci --prefix frontend
 ```
 
-On Windows, run `start.bat` to initialize the local database and start both services. Open the frontend at http://localhost:8080 and the backend API documentation at http://localhost:8000/docs.
+On Windows, run `start.bat` to initialize the local database and start both services. Open the frontend at http://localhost:8080 and the backend API documentation at http://localhost:8001/docs.
 
 ## Configuration
 

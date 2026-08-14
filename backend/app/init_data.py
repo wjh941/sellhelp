@@ -109,9 +109,9 @@ def main():
     print("✅ 初始化完成！")
     print("=" * 50)
     print("\n下一步：")
-    print("  1. 启动后端: uvicorn app.main:app --host 0.0.0.0 --port 8000")
+    print("  1. 启动后端: uvicorn app.main:app --host 0.0.0.0 --port 8001")
     print("  2. 启动前端: cd frontend && npm run dev")
-    print("  3. 访问系统: http://localhost:5173")
+    print("  3. 访问系统: http://localhost:8080")
     print()
 
 

@@ -76,13 +76,13 @@ echo.
 echo ============================================
 echo   系统启动中，请在浏览器访问：
 echo   前端：http://localhost:8080
-echo   后端API：http://localhost:8000/docs
+echo   后端API：http://localhost:8001/docs
 echo ============================================
 echo.
 
 REM 启动后端（后台）
 cd /d "%~dp0backend"
-start "盈泰后端" cmd /k "python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+start "盈泰后端" cmd /k "python -m uvicorn app.main:app --host 0.0.0.0 --port 8001"
 
 REM 等待2秒后启动前端
 timeout /t 2 /nobreak >nul
@@ -92,6 +92,6 @@ start "盈泰前端" cmd /k "npm run dev -- --port 8080"
 
 echo.
 echo 系统已在新窗口中启动！
-echo 如无法访问，请检查端口 8080 和 8000 是否被占用。
+echo 如无法访问，请检查端口 8080 和 8001 是否被占用。
 echo.
 pause
