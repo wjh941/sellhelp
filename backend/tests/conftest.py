@@ -13,6 +13,7 @@ if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
 os.environ["SELLHELP_DATABASE_URL"] = "sqlite://"
+os.environ["SELLHELP_DISABLE_MARKET_SYNC_SCHEDULER"] = "1"
 
 from app.database import get_db
 from app.main import app

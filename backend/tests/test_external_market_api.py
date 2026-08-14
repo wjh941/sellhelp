@@ -324,6 +324,25 @@ def test_sync_schedule_validates_and_persists_a_strict_24_hour_time(client, db_s
     assert db_session.query(SystemConfig).filter_by(key="external_market_sync_time").one().value == "18:05"
 
 
+def test_sync_schedule_reschedules_the_running_scheduler_after_persisting(client, db_session, monkeypatch):
+    """Leaving the scheduler unchanged after a successful update would make the API report a schedule it does not run."""
+    from app.routers import external_market_router
+
+    calls = []
+
+    class FakeScheduler:
+        def reschedule(self, sync_time):
+            calls.append(sync_time)
+
+    monkeypatch.setattr(external_market_router, "get_market_sync_scheduler", lambda: FakeScheduler())
+
+    response = client.put("/api/external-market-sync/schedule", json={"sync_time": "18:05"})
+
+    assert response.status_code == 200
+    assert db_session.query(SystemConfig).filter_by(key="external_market_sync_time").one().value == "18:05"
+    assert calls == ["18:05"]
+
+
 def test_init_db_migrates_legacy_external_quote_table_with_dismissal_audit_column(monkeypatch):
     """Without the compatibility migration, a Task 1 ledger cannot be dismissed after upgrading to Task 3."""
     legacy_engine = create_engine("sqlite://")

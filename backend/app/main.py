@@ -11,6 +11,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import init_db
+from app.services.market_sync_scheduler import market_sync_scheduler
 
 # 导入所有路由
 from app.routers.product_router import router as product_router
@@ -43,6 +44,13 @@ allowed_origins = [origin.strip() for origin in os.getenv(
 @app.on_event("startup")
 def initialize_database():
     init_db()
+    if os.getenv("SELLHELP_DISABLE_MARKET_SYNC_SCHEDULER") != "1":
+        market_sync_scheduler.start()
+
+
+@app.on_event("shutdown")
+def shutdown_market_sync_scheduler():
+    market_sync_scheduler.shutdown()
 
 # CORS配置 - 允许前端访问
 app.add_middleware(

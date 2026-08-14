@@ -22,6 +22,7 @@ from ..schemas.all_schemas import (
 )
 from ..services.anysearch_client import AnySearchClient
 from ..services.market_sync_service import DEFAULT_REGION, ExternalMarketSyncService
+from ..services.market_sync_scheduler import get_market_sync_scheduler
 
 
 router = APIRouter(prefix="/api", tags=["External market data"])
@@ -173,4 +174,5 @@ def update_external_market_sync_schedule(data: ExternalMarketSyncScheduleUpdate,
     else:
         db.add(SystemConfig(key=SYNC_TIME_KEY, value=data.sync_time, description="External market sync time"))
     db.commit()
+    get_market_sync_scheduler().reschedule(data.sync_time)
     return data
