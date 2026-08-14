@@ -3,12 +3,28 @@
 本地单机版 SQLite 数据库
 """
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os
 
 # 数据库文件路径（项目根目录下）
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "yingtai.db")
 SQLALCHEMY_DATABASE_URL = os.getenv("SELLHELP_DATABASE_URL", f"sqlite:///{DB_PATH}")
+
+
+def get_active_sqlite_db_path() -> str:
+    """Return the configured SQLite file path for file-copy operations."""
+    url = make_url(SQLALCHEMY_DATABASE_URL)
+    database = url.database
+    if (
+        url.get_backend_name() != "sqlite"
+        or not database
+        or database == ":memory:"
+        or database.startswith("file:")
+        or url.query.get("mode") == "memory"
+    ):
+        raise ValueError("Backup and restore require a file-based SQLite database")
+    return os.path.abspath(database)
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,

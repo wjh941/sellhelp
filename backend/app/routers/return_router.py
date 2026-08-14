@@ -297,6 +297,7 @@ def confirm_stock_take(items: List[StockTakeItemCreate], db: Session = Depends(g
     results = []
 
     validated_items = []
+    seen_batch_ids = set()
     for item in items:
         product = db.query(Product).filter(Product.id == item.product_id).first()
         if not product:
@@ -308,6 +309,9 @@ def confirm_stock_take(items: List[StockTakeItemCreate], db: Session = Depends(g
             raise HTTPException(status_code=400, detail="批次不存在")
         if batch.product_id != item.product_id:
             raise HTTPException(status_code=400, detail="批次不属于该商品")
+        if item.batch_id in seen_batch_ids:
+            raise HTTPException(status_code=400, detail="盘点批次不能重复")
+        seen_batch_ids.add(item.batch_id)
         validated_items.append((item, product, batch))
 
     for item, product, batch in validated_items:

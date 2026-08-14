@@ -12,7 +12,7 @@ import shutil
 import json
 import re
 
-from ..database import get_db, DB_PATH
+from ..database import get_active_sqlite_db_path, get_db, DB_PATH
 from ..models.all_models import Product, ProductBatch, SalesOrder, SalesOrderItem, SystemConfig, WeeklyReport
 
 router = APIRouter(prefix="/api/system", tags=["系统管理"])
@@ -30,6 +30,13 @@ def _resolve_backup_file(filename: str) -> str:
     return os.path.join(_backup_directory(), filename)
 
 
+def _active_database_path() -> str:
+    try:
+        return get_active_sqlite_db_path()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 # ========== 数据库备份 ==========
 
 @router.post("/backup")
@@ -37,7 +44,8 @@ def backup_database(
     db: Session = Depends(get_db)
 ):
     """备份数据库"""
-    if not os.path.exists(DB_PATH):
+    database_path = _active_database_path()
+    if not os.path.exists(database_path):
         raise HTTPException(status_code=404, detail="数据库文件不存在")
 
     backup_dir = _backup_directory()
@@ -47,7 +55,7 @@ def backup_database(
     backup_filename = f"yingtai_backup_{timestamp}.db"
     backup_path = os.path.join(backup_dir, backup_filename)
 
-    shutil.copy2(DB_PATH, backup_path)
+    shutil.copy2(database_path, backup_path)
 
     # 更新备份记录
     config = db.query(SystemConfig).filter(SystemConfig.key == "last_backup").first()
@@ -115,18 +123,19 @@ def restore_database(
     backup_file: str = Query(..., description="备份文件名"),
 ):
     """恢复数据库"""
+    database_path = _active_database_path()
     backup_path = _resolve_backup_file(backup_file)
     if not os.path.exists(backup_path):
         raise HTTPException(status_code=404, detail="备份文件不存在")
 
     # 恢复前先备份当前数据库
     pre_backup = None
-    if os.path.exists(DB_PATH):
+    if os.path.exists(database_path):
         pre_backup = _resolve_backup_file(f"pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
-        shutil.copy2(DB_PATH, pre_backup)
+        shutil.copy2(database_path, pre_backup)
 
     # 恢复
-    shutil.copy2(backup_path, DB_PATH)
+    shutil.copy2(backup_path, database_path)
 
     return {
         "message": "数据库恢复成功，请重启系统",
@@ -424,7 +433,11 @@ def get_system_info(db: Session = Depends(get_db)):
     stock_value = db.query(ProductBatch).filter(ProductBatch.remaining_quantity > 0).count()
 
     # 数据库大小
-    db_size = os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0
+    try:
+        database_path = get_active_sqlite_db_path()
+    except ValueError:
+        database_path = None
+    db_size = os.path.getsize(database_path) if database_path and os.path.exists(database_path) else 0
 
     # 最近周报
     latest_report = db.query(WeeklyReport).order_by(WeeklyReport.created_at.desc()).first()
@@ -433,7 +446,7 @@ def get_system_info(db: Session = Depends(get_db)):
         "system": "盈泰副食贸易管理系统",
         "version": "2.0.0",
         "database": {
-            "path": DB_PATH,
+            "path": database_path,
             "size": db_size,
             "tables": {
                 "products": product_count,

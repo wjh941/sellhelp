@@ -73,4 +73,3 @@ Inventory mutations remain in `InventoryService`; receivable mutations remain in
 - `python -m pytest -q` passes from `backend`.
 - `npm.cmd run build` passes from `frontend` outside the execution sandbox restriction that currently prevents the Vite/esbuild child process from reading the workspace path.
 - Parse backend Python files and run `git diff --check`.
-

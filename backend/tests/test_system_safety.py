@@ -1,8 +1,10 @@
 from datetime import datetime
+from pathlib import Path
 from urllib.parse import quote
 
 import pytest
 
+from app import database
 from app.models.all_models import Customer, Product, SalesOrder, SalesOrderItem
 
 
@@ -77,3 +79,52 @@ def test_backup_operations_reject_unsafe_filenames(client, method, path, filenam
     )
 
     assert response.status_code == 400
+
+
+def test_backup_and_restore_use_configured_file_sqlite_database(client, monkeypatch, tmp_path):
+    database_path = tmp_path / "configured.db"
+    database_path.write_bytes(b"configured database")
+    monkeypatch.setattr(database, "SQLALCHEMY_DATABASE_URL", f"sqlite:///{database_path.as_posix()}")
+
+    system_info = client.get("/api/system/info")
+    backup = client.post("/api/system/backup")
+
+    assert system_info.status_code == 200
+    assert system_info.json()["database"] == {
+        "path": str(database_path),
+        "size": len(b"configured database"),
+        "tables": {
+            "products": 0,
+            "customers": 0,
+            "suppliers": 0,
+            "sales_orders": 0,
+            "batch_records": 0,
+        },
+    }
+    assert backup.status_code == 200
+    backup_path = backup.json()["backup_path"]
+    assert Path(backup_path).read_bytes() == b"configured database"
+
+    database_path.write_bytes(b"changed database")
+    restored = client.post("/api/system/restore", params={"backup_file": backup.json()["backup_file"]})
+
+    assert restored.status_code == 200
+    assert database_path.read_bytes() == b"configured database"
+    assert Path(restored.json()["pre_restore_backup"]).read_bytes() == b"changed database"
+
+
+@pytest.mark.parametrize("database_url", ["sqlite://", "sqlite:///:memory:", "postgresql://example/sellhelp"])
+@pytest.mark.parametrize(
+    ("path", "params"),
+    [
+        ("/api/system/backup", None),
+        ("/api/system/restore", {"backup_file": "yingtai_backup_20260814_120000.db"}),
+    ],
+)
+def test_backup_operations_reject_non_file_database_urls(client, monkeypatch, database_url, path, params):
+    monkeypatch.setattr(database, "SQLALCHEMY_DATABASE_URL", database_url)
+
+    response = client.post(path, params=params)
+
+    assert response.status_code == 400
+    assert "file-based SQLite" in response.json()["detail"]

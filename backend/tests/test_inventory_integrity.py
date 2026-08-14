@@ -439,3 +439,20 @@ def test_stocktake_rejects_aggregate_adjustment_and_negative_actual_quantity(cli
     assert negative.status_code == 422
     assert db_session.query(StockTake).count() == 0
     assert movement_rows(db_session, product_id=product.id) == []
+
+
+def test_stocktake_rejects_duplicate_batch_before_persisting_any_rows(client, db_session):
+    product, _, _, batch = make_product(db_session)
+
+    response = client.post(
+        "/api/stock-takes/confirm",
+        json=[
+            {"product_id": product.id, "batch_id": batch.id, "actual_quantity": 8},
+            {"product_id": product.id, "batch_id": batch.id, "actual_quantity": 12},
+        ],
+    )
+
+    assert response.status_code == 400
+    assert db_session.query(StockTake).count() == 0
+    assert movement_rows(db_session, product_id=product.id) == []
+    assert db_session.get(ProductBatch, batch.id).remaining_quantity == pytest.approx(10)
