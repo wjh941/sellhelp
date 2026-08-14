@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node --test tests/external-market-api.test.mjs tests/external-market-url.test.mjs",
+    "test": "node --test tests/external-market-api.test.mjs tests/external-market-url.test.mjs tests/operation-ui.test.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },
