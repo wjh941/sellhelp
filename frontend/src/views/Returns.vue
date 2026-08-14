@@ -89,9 +89,10 @@
               <el-input-number v-model="returnForm.quantity" :min="0" style="width: 100%;" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col v-if="returnForm.return_type !== customerReturnType" :span="12">
             <el-form-item label="退款金额">
               <el-input-number v-model="returnForm.refund_amount" :min="0" :precision="2" style="width: 100%;" />
+              <el-input-number v-if="returnForm.return_type === '渚涔ュ簲鍟嗛€€璐?'" v-model="returnForm.refund_amount" :min="0" :precision="2" style="width: 100%;" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -174,6 +175,7 @@ const returnForm = reactive({
   batch_id: null, quantity: 0, refund_amount: 0, reason: '', operator: ''
 })
 
+const customerReturnType = returnForm.return_type
 const dialogTitle = () => `${currentReturnType.value}`
 
 const formatDate = (dateStr) => {
@@ -223,6 +225,14 @@ const onProductChange = async () => {
 }
 
 const submitReturn = async () => {
+  if (returnForm.return_type === customerReturnType && !returnForm.related_order_no.trim()) {
+    ElMessage.warning('Source sales order is required')
+    return
+  }
+  if (returnForm.return_type === '瀹㈡埛閫€璐?' && !returnForm.related_order_no.trim()) {
+    ElMessage.warning('璇疯緭鍏ュ師閿€鍞崟鍙?')
+    return
+  }
   if (!returnForm.product_id) {
     ElMessage.warning('请选择商品')
     return
