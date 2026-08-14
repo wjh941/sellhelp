@@ -153,6 +153,47 @@ def test_purchase_delete_records_reversal_before_deleting_unconsumed_batch(clien
     assert reversal.batch_id == batch_id
 
 
+def test_purchase_delete_after_full_supplier_return_skips_zero_quantity_reversal(client, db_session):
+    product = Product(name="Returned purchase product", unit="unit")
+    supplier = Supplier(name="Returned purchase supplier")
+    db_session.add_all([product, supplier])
+    db_session.commit()
+
+    created = client.post(
+        "/api/purchase-orders",
+        json={
+            "supplier_id": supplier.id,
+            "items": [{"product_id": product.id, "batch_no": "B-RETURNED", "quantity": 4, "unit_price": 3}],
+        },
+    )
+    assert created.status_code == 200
+    order_id = created.json()["id"]
+    batch_id = db_session.query(ProductBatch).filter(ProductBatch.purchase_item_id.isnot(None)).one().id
+
+    returned = client.post(
+        "/api/returns",
+        json={
+            "return_type": SUPPLIER_RETURN,
+            "partner_id": supplier.id,
+            "product_id": product.id,
+            "batch_id": batch_id,
+            "quantity": 4,
+            "refund_amount": 0,
+        },
+    )
+    assert returned.status_code == 200
+
+    deleted = client.delete(f"/api/purchase-orders/{order_id}")
+
+    assert deleted.status_code == 200
+    assert db_session.get(ProductBatch, batch_id) is None
+    assert db_session.get(PurchaseOrder, order_id) is None
+    assert [row.reason for row in movement_rows(db_session, product_id=product.id)] == [
+        "purchase",
+        "supplier_return",
+    ]
+
+
 def test_repeated_outbound_confirmation_is_idempotent(client, db_session):
     product, customer, _, batch = make_product(db_session)
     sale = client.post(

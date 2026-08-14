@@ -176,16 +176,17 @@ def delete_purchase_order(order_id: int, db: Session = Depends(get_db)):
     for item in order.items:
         batch = db.query(ProductBatch).filter(ProductBatch.purchase_item_id == item.id).first()
         if batch:
-            inventory_service.record_movement(
-                product_id=batch.product_id,
-                batch_id=batch.id,
-                direction="outbound",
-                quantity=batch.remaining_quantity,
-                reason="purchase_reversal",
-                reference_no=order.order_no,
-                purchase_order_id=order.id,
-                operator=order.operator,
-            )
+            if batch.remaining_quantity > 0:
+                inventory_service.record_movement(
+                    product_id=batch.product_id,
+                    batch_id=batch.id,
+                    direction="outbound",
+                    quantity=batch.remaining_quantity,
+                    reason="purchase_reversal",
+                    reference_no=order.order_no,
+                    purchase_order_id=order.id,
+                    operator=order.operator,
+                )
             db.delete(batch)
 
     db.delete(order)
