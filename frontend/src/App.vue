@@ -155,6 +155,7 @@ const toggleTheme = () => {
   theme.value = isDark.value ? 'light' : 'dark'
   document.documentElement.dataset.theme = theme.value
   writeTheme(theme.value, window.localStorage)
+  document.dispatchEvent(new CustomEvent('yingtai-theme-change'))
 }
 
 onMounted(() => {

@@ -214,6 +214,18 @@ test('dashboard uses a named resize listener with unmount cleanup', async () => 
   assert.match(source, /onBeforeUnmount\(\(\)\s*=>\s*\{[\s\S]*window\.removeEventListener\('resize',\s*onWindowResize\)[\s\S]*\}\)/)
 })
 
+test('dashboard refreshes chart colors after the application theme changes', async () => {
+  const [appSource, dashboardSource] = await Promise.all([
+    readFile(new URL('../src/App.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../src/views/Dashboard.vue', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(appSource, /document\.dispatchEvent\(new CustomEvent\('yingtai-theme-change'\)\)/)
+  assert.match(dashboardSource, /const onThemeChange\s*=\s*\(\)\s*=>\s*\{[\s\S]*renderCharts\(\)[\s\S]*\}/)
+  assert.match(dashboardSource, /document\.addEventListener\('yingtai-theme-change',\s*onThemeChange\)/)
+  assert.match(dashboardSource, /document\.removeEventListener\('yingtai-theme-change',\s*onThemeChange\)/)
+})
+
 test('dashboard mounts chart containers before rendering chart instances', async () => {
   const source = await readFile(new URL('../src/views/Dashboard.vue', import.meta.url), 'utf8')
   const loadBlock = source.match(/const loadData = async \(\) => \{[\s\S]*?\n\}/)?.[0] || ''

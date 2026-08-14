@@ -351,6 +351,9 @@ const onWindowResize = () => {
   weeklySalesChart?.resize()
   productTrendChart?.resize()
 }
+const onThemeChange = () => {
+  if (!loading.value && !loadError.value) renderCharts()
+}
 
 const loadData = async () => {
   loading.value = true
@@ -389,10 +392,12 @@ const loadData = async () => {
 onMounted(() => {
   loadData()
   window.addEventListener('resize', onWindowResize)
+  document.addEventListener('yingtai-theme-change', onThemeChange)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onWindowResize)
+  document.removeEventListener('yingtai-theme-change', onThemeChange)
   disposeCharts()
 })
 </script>
