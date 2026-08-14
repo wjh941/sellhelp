@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
+process.env.TZ = 'Asia/Shanghai'
+
 import {
   UI_STORAGE_KEYS,
   readTheme,
@@ -40,6 +42,9 @@ test('accepts only light and dark themes without overwriting invalid values', ()
   const storage = new MemoryStorage()
   storage.setItem(UI_STORAGE_KEYS.theme, 'dark')
   assert.equal(readTheme(storage, 'light'), 'dark')
+  assert.equal(writeTheme('dark', storage), true)
+  assert.equal(storage.getItem(UI_STORAGE_KEYS.theme), 'dark')
+  assert.equal(readTheme(storage), 'dark')
   assert.equal(writeTheme('light', storage), true)
   assert.equal(readTheme(storage), 'light')
   assert.equal(writeTheme('sepia', storage), false)
@@ -77,6 +82,7 @@ test('calculates order amount and profit from numeric item values', () => {
 test('returns whole calendar days to expiry and null for no expiry', () => {
   assert.equal(getDaysToExpiry('2026-08-20', '2026-08-14T23:59:00+08:00'), 6)
   assert.equal(getDaysToExpiry('2026-08-13', '2026-08-14T00:01:00+08:00'), -1)
+  assert.equal(getDaysToExpiry('2026-08-20', new Date('2026-08-14T01:00:00+08:00')), 6)
   assert.equal(getDaysToExpiry(null, '2026-08-14'), null)
 })
 
