@@ -22,7 +22,7 @@ DEFAULT_REGION = "东莞/广东"
 NATIONAL_REGION = "全国"
 LOCK_NAME = "external_market_sync"
 OFFICIAL_DOMAIN_PRIORITY = ("ndrc.gov.cn", "grain.gov.cn", "gov.cn")
-RMB_PRICE_PATTERN = re.compile(r"(?:[¥¥]\s*(\d+(?:\.\d{1,2})?)|(\d+(?:\.\d{1,2})?)\s*元)")
+RMB_PRICE_PATTERN = re.compile(r"(?:[\u00a5\uffe5]\s*(\d+(?:\.\d{1,2})?)|(\d+(?:\.\d{1,2})?)\s*\u5143)")
 
 
 def _official_query(scope: str, region: str) -> str:

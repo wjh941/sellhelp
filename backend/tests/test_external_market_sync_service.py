@@ -150,6 +150,13 @@ def test_sync_keeps_unmarked_numbers_as_price_none(db_session):
     assert all(item.price is None for item in db_session.query(ExternalMarketQuote).all())
 
 
+def test_sync_parses_full_width_rmb_price_marker(db_session):
+    client = FakeSearchClient(lambda query: [quote(excerpt="Listed at \uffe512.50 per unit")])
+    ExternalMarketSyncService(db_session, client).sync(trigger="manual")
+
+    assert {item.price for item in db_session.query(ExternalMarketQuote).all()} == {12.5}
+
+
 def test_anysearch_client_converts_malformed_bytes_to_controlled_error(monkeypatch):
 
     class Response:
