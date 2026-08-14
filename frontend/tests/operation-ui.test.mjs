@@ -109,6 +109,35 @@ test('keeps the sales draft local until a successful order submission clears it'
   assert.equal(readJson(storage, UI_STORAGE_KEYS.salesDraft, null), null)
 })
 
+test('keeps the purchase draft local until a successful purchase submission clears it', () => {
+  const storage = new MemoryStorage()
+  const draft = {
+    supplier_id: 5,
+    purchase_date: '2026-08-14T09:30:00',
+    items: [{ product_id: 12, batch_no: 'IN-0814', quantity: 6, unit_price: 18.5 }],
+  }
+
+  assert.equal(writeJson(storage, UI_STORAGE_KEYS.purchaseDraft, draft), true)
+  assert.deepEqual(readJson(storage, UI_STORAGE_KEYS.purchaseDraft, null), draft)
+  assert.equal(removeKey(storage, UI_STORAGE_KEYS.purchaseDraft), true)
+  assert.equal(readJson(storage, UI_STORAGE_KEYS.purchaseDraft, null), null)
+})
+
+test('purchase workspace keeps its batch entry safety contract', async () => {
+  const source = await readFile(new URL('../src/views/Purchase.vue', import.meta.url), 'utf8')
+  const clearDraft = source.match(/async function clearPurchaseDraft\(\) \{[\s\S]*?\n\}/)?.[0] || ''
+
+  assert.match(source, /<el-dialog[\s\S]*?draggable/)
+  assert.match(source, /const draggedLineIndex\s*=\s*ref\(null\)/)
+  assert.match(source, /@dragstart="draggedLineIndex = index"/)
+  assert.match(source, /getDaysToExpiry/)
+  assert.match(source, /<el-tag[^>]*:type="expiryStatus\(item\)\.type"[\s\S]*?>[\s\S]*?\{\{ expiryStatus\(item\)\.text \}\}/)
+  assert.ok(clearDraft.indexOf('resetPurchase()') < clearDraft.indexOf('await nextTick()'))
+  assert.ok(clearDraft.indexOf('await nextTick()') < clearDraft.indexOf('removeKey(window.localStorage, UI_STORAGE_KEYS.purchaseDraft)'))
+  assert.match(source, /createPurchaseOrder\(buildPurchasePayload\(newPurchase\)\)/)
+  assert.doesNotMatch(source, /createPurchaseOrder\(newPurchase\)/)
+})
+
 test('sales workspace keeps its create-order safety contract', async () => {
   const source = await readFile(new URL('../src/views/Sales.vue', import.meta.url), 'utf8')
 

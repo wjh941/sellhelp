@@ -1,212 +1,192 @@
 <template>
-  <div>
-    <div class="page-card">
-      <div class="page-header">
-        <h2>入库开单</h2>
+  <section class="purchase-page">
+    <div class="page-card purchase-list-card">
+      <header class="page-header">
+        <div>
+          <p class="section-eyebrow">入库业务</p>
+          <h2>入库单据</h2>
+        </div>
         <div class="actions">
-          <el-button type="primary" @click="openCreateDialog()">
+          <el-button class="primary-action" type="primary" @click="openCreateDialog">
             <el-icon><Plus /></el-icon>新建入库单
           </el-button>
         </div>
-      </div>
+      </header>
 
-      <div class="search-bar">
+      <div class="search-bar purchase-filters">
         <el-date-picker v-model="filterDate" type="daterange" range-separator="至"
           start-placeholder="开始日期" end-placeholder="结束日期" value-format="YYYY-MM-DD" />
-        <el-select v-model="filterSupplier" placeholder="供应商" style="width: 180px;" clearable>
-          <el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id" />
+        <el-select v-model="filterSupplier" filterable placeholder="筛选供应商" clearable>
+          <el-option v-for="supplier in suppliers" :key="supplier.id" :label="supplier.name" :value="supplier.id" />
         </el-select>
         <el-button type="primary" @click="loadData">查询</el-button>
       </div>
 
-      <el-table :data="orders" stripe v-loading="loading">
-        <el-table-column prop="order_no" label="入库单号" width="200" />
-        <el-table-column prop="supplier_name" label="供应商" min-width="150" />
-        <el-table-column label="入库日期" width="160">
-          <template #default="{ row }">{{ formatDate(row.purchase_date) }}</template>
-        </el-table-column>
-        <el-table-column prop="total_amount" label="入库金额" width="120">
-          <template #default="{ row }">
-            <span style="color: #409EFF; font-weight: bold;">¥{{ row.total_amount }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="operator" label="操作员" width="100" />
-        <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
-        <el-table-column label="操作" width="180" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" size="small" link @click="viewDetail(row)">查看</el-button>
-            <el-button type="danger" size="small" link @click="handleDelete(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </div>
-
-    <!-- 新建入库单 -->
-    <el-dialog v-model="createDialogVisible" title="新建入库单" width="900px" top="5vh">
-      <el-form :model="newOrder" label-width="100px">
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="供应商" required>
-              <el-select v-model="newOrder.supplier_id" placeholder="选择供应商" style="width: 100%;">
-                <el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="采购日期">
-              <el-date-picker v-model="newOrder.purchase_date" type="datetime"
-                placeholder="选择日期" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 100%;" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-form-item label="操作员">
-          <el-input v-model="newOrder.operator" placeholder="操作员姓名" />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="newOrder.remark" type="textarea" :rows="2" />
-        </el-form-item>
-
-        <el-divider content-position="left">入库商品明细</el-divider>
-
-        <div style="margin-bottom: 10px;">
-          <el-button type="primary" size="small" @click="addItem">
-            <el-icon><Plus /></el-icon>添加商品
-          </el-button>
-        </div>
-
-        <el-table :data="newOrder.items" border size="small" style="width: 100%;" empty-text="请添加入库商品">
-          <el-table-column label="商品" width="200">
-            <template #default="{ row, $index }">
-              <el-select v-model="row.product_id" placeholder="选择商品" filterable style="width: 100%;">
-                <el-option v-for="p in products" :key="p.id" :label="p.name" :value="p.id" />
-              </el-select>
-            </template>
-          </el-table-column>
-          <el-table-column prop="batch_no" label="批次号" width="140">
+      <div class="table-scroll-wrap">
+        <el-table :data="orders" stripe v-loading="loading" class="business-table" row-key="id">
+          <el-table-column prop="order_no" label="入库单号" min-width="176" />
+          <el-table-column prop="supplier_name" label="供应商" min-width="160" />
+          <el-table-column label="入库日期" min-width="158"><template #default="{ row }">{{ formatDate(row.purchase_date) }}</template></el-table-column>
+          <el-table-column prop="total_amount" label="入库金额" width="128" align="right"><template #default="{ row }"><strong class="money-primary">{{ formatMoney(row.total_amount) }}</strong></template></el-table-column>
+          <el-table-column prop="operator" label="操作员" width="108" />
+          <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
+          <el-table-column label="操作" width="154" fixed="right">
             <template #default="{ row }">
-              <el-input v-model="row.batch_no" size="small" />
-            </template>
-          </el-table-column>
-          <el-table-column label="生产日期" width="140">
-            <template #default="{ row }">
-              <el-date-picker v-model="row.production_date" type="date" placeholder="日期"
-                value-format="YYYY-MM-DD" size="small" style="width: 100%;" />
-            </template>
-          </el-table-column>
-          <el-table-column label="到期日期" width="140">
-            <template #default="{ row }">
-              <el-date-picker v-model="row.expiry_date" type="date" placeholder="日期"
-                value-format="YYYY-MM-DD" size="small" style="width: 100%;" />
-            </template>
-          </el-table-column>
-          <el-table-column label="数量" width="100">
-            <template #default="{ row }">
-              <el-input-number v-model="row.quantity" :min="1" size="small" style="width: 100%;" />
-            </template>
-          </el-table-column>
-          <el-table-column label="单价" width="100">
-            <template #default="{ row }">
-              <el-input-number v-model="row.unit_price" :min="0.01" :precision="2" size="small" style="width: 100%;" />
-            </template>
-          </el-table-column>
-          <el-table-column label="金额" width="100">
-            <template #default="{ row }">
-              <strong>¥{{ (row.quantity * row.unit_price).toFixed(2) }}</strong>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="70">
-            <template #default="{ $index }">
-              <el-button type="danger" size="small" link @click="removeItem($index)">删除</el-button>
+              <el-button type="primary" link @click="viewDetail(row)">查看</el-button>
+              <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
+      </div>
+    </div>
 
-        <div style="text-align: right; margin-top: 15px;">
-          <span>合计金额：</span>
-          <span style="font-size: 20px; color: #409EFF; font-weight: bold;">¥{{ totalAmount.toFixed(2) }}</span>
-        </div>
-      </el-form>
+    <el-dialog v-model="createDialogVisible" title="新建入库单" width="min(1220px, calc(100vw - 40px))" top="5vh" draggable
+      destroy-on-close class="purchase-create-dialog" @closed="draggedLineIndex = null">
+      <div class="purchase-workspace">
+        <section class="purchase-column entry-column">
+          <div class="column-heading"><span>1</span><div><h3>单据信息</h3><p>选择商品后将直接加入右侧批次明细</p></div></div>
+          <el-form label-position="top" class="compact-form">
+            <el-form-item label="供应商" required>
+              <el-select v-model="newPurchase.supplier_id" filterable clearable placeholder="输入供应商名称搜索">
+                <el-option v-for="supplier in suppliers" :key="supplier.id" :label="supplier.name" :value="supplier.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="采购日期">
+              <el-date-picker v-model="newPurchase.purchase_date" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择采购日期" />
+            </el-form-item>
+            <el-form-item label="操作员"><el-input v-model="newPurchase.operator" placeholder="录入操作员姓名" /></el-form-item>
+            <el-form-item label="单据备注"><el-input v-model="newPurchase.remark" type="textarea" :rows="3" placeholder="送货、对账等补充说明" /></el-form-item>
+          </el-form>
+
+          <div class="form-divider"></div>
+          <el-form label-position="top" class="compact-form">
+            <el-form-item label="添加商品">
+              <el-select v-model="productSelection" filterable clearable placeholder="输入商品名称搜索，回车即可添加" @change="appendProduct">
+                <el-option v-for="product in products" :key="product.id" :label="product.name" :value="product.id">
+                  <div class="product-option"><span>{{ product.name }}</span><small>当前库存 {{ product.current_stock ?? '-' }}</small></div>
+                </el-option>
+              </el-select>
+            </el-form-item>
+          </el-form>
+          <el-alert type="info" :closable="false" show-icon title="商品选中后会立即生成一条批次明细；可在右侧调整数量、进价及日期。" />
+        </section>
+
+        <section class="purchase-column preview-column">
+          <div class="column-heading"><span>2</span><div><h3>批次明细预览</h3><p>拖动整行可调整顺序，金额实时计算</p></div></div>
+          <div v-if="newPurchase.items.length" class="purchase-lines" aria-label="入库批次明细">
+            <article v-for="(item, index) in newPurchase.items" :key="item.line_id" class="purchase-line" draggable="true"
+              @dragstart="draggedLineIndex = index" @dragover.prevent @drop="dropLine(index)">
+              <el-icon class="drag-handle" aria-label="拖动排序"><Rank /></el-icon>
+              <div class="line-product"><strong>{{ item.product_info?.name || '商品' }}</strong><small>批次 {{ item.batch_no || '待填写' }}</small></div>
+              <el-input v-model="item.batch_no" aria-label="批次号" placeholder="批次号" />
+              <el-date-picker v-model="item.production_date" type="date" value-format="YYYY-MM-DD" placeholder="生产日期" aria-label="生产日期" />
+              <div class="expiry-field">
+                <el-date-picker v-model="item.expiry_date" type="date" value-format="YYYY-MM-DD" placeholder="到期日期" aria-label="到期日期" />
+                <el-tag :type="expiryStatus(item).type" effect="light">{{ expiryStatus(item).text }}</el-tag>
+              </div>
+              <el-input-number v-model="item.quantity" :min="1" :precision="0" controls-position="right" aria-label="入库数量" />
+              <el-input-number v-model="item.unit_price" :min="0.01" :precision="2" controls-position="right" aria-label="入库单价" />
+              <strong class="line-amount">{{ formatMoney(lineAmount(item)) }}</strong>
+              <el-button type="danger" link title="删除此批次明细" aria-label="删除此批次明细" @click="removeItem(index)">删除</el-button>
+            </article>
+          </div>
+          <el-empty v-else description="从左侧选择商品后，批次明细会自动出现在这里" :image-size="88" />
+
+          <div class="totals-panel">
+            <div><span>入库品项</span><strong>{{ newPurchase.items.length }} 项</strong></div>
+            <div><span>合计金额</span><strong>{{ formatMoney(totalAmount) }}</strong></div>
+          </div>
+          <div class="preview-actions"><el-button @click="clearPurchaseDraft">清空草稿</el-button></div>
+        </section>
+      </div>
 
       <template #footer>
-        <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitOrder" :disabled="!newOrder.items.length">
-          确认入库
-        </el-button>
+        <el-button @click="createDialogVisible = false">暂存并关闭</el-button>
+        <el-button class="primary-action" type="primary" :loading="submitting" :disabled="!newPurchase.items.length" @click="submitOrder">确认入库</el-button>
       </template>
     </el-dialog>
 
-    <!-- 入库单详情 -->
-    <el-dialog v-model="detailVisible" title="入库单详情" width="700px">
-      <el-descriptions :column="2" border v-if="currentOrder">
+    <el-dialog v-model="detailVisible" title="入库单详情" width="min(760px, calc(100vw - 32px))">
+      <el-descriptions v-if="currentOrder" :column="2" border>
         <el-descriptions-item label="入库单号">{{ currentOrder.order_no }}</el-descriptions-item>
         <el-descriptions-item label="供应商">{{ currentOrder.supplier_name }}</el-descriptions-item>
         <el-descriptions-item label="入库日期">{{ formatDate(currentOrder.purchase_date) }}</el-descriptions-item>
         <el-descriptions-item label="操作员">{{ currentOrder.operator }}</el-descriptions-item>
-        <el-descriptions-item label="入库金额" :span="2">
-          <span style="color: #409EFF; font-weight: bold;">¥{{ currentOrder.total_amount }}</span>
-        </el-descriptions-item>
+        <el-descriptions-item label="入库金额" :span="2"><strong class="money-primary">{{ formatMoney(currentOrder.total_amount) }}</strong></el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ currentOrder.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
-
       <el-divider>商品明细</el-divider>
-
-      <el-table :data="currentOrder?.items || []" border size="small">
+      <div class="table-scroll-wrap"><el-table :data="currentOrder?.items || []" border class="detail-table">
         <el-table-column prop="product_name" label="商品" min-width="150" />
-        <el-table-column prop="batch_no" label="批次号" width="120" />
-        <el-table-column prop="quantity" label="数量" width="80" />
-        <el-table-column prop="unit_price" label="单价" width="80">
-          <template #default="{ row }">¥{{ row.unit_price }}</template>
-        </el-table-column>
-        <el-table-column prop="amount" label="金额" width="100">
-          <template #default="{ row }">¥{{ row.amount }}</template>
-        </el-table-column>
-        <el-table-column label="剩余库存" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.remaining_quantity > 0 ? 'success' : 'info'" size="small">
-              {{ row.remaining_quantity }}
-            </el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
+        <el-table-column prop="batch_no" label="批次号" min-width="120" />
+        <el-table-column prop="quantity" label="数量" width="84" />
+        <el-table-column prop="unit_price" label="单价" width="96"><template #default="{ row }">{{ formatMoney(row.unit_price) }}</template></el-table-column>
+        <el-table-column prop="amount" label="金额" width="104"><template #default="{ row }">{{ formatMoney(row.amount) }}</template></el-table-column>
+        <el-table-column label="剩余库存" width="108"><template #default="{ row }"><el-tag :type="row.remaining_quantity > 0 ? 'success' : 'info'">{{ row.remaining_quantity }}</el-tag></template></el-table-column>
+      </el-table></div>
     </el-dialog>
-  </div>
+  </section>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  getSuppliers, getProducts, getPurchaseOrders, createPurchaseOrder, deletePurchaseOrder, getPurchaseOrder
+  createPurchaseOrder, deletePurchaseOrder, getProducts, getPurchaseOrder,
+  getPurchaseOrders, getSuppliers,
 } from '@/api'
+import {
+  UI_STORAGE_KEYS, buildPurchasePayload, getDaysToExpiry, readJson, removeKey, writeJson,
+} from '@/utils/operationUi'
 
 const loading = ref(false)
+const submitting = ref(false)
 const orders = ref([])
 const suppliers = ref([])
 const products = ref([])
 const filterDate = ref([])
 const filterSupplier = ref(null)
-
 const createDialogVisible = ref(false)
 const detailVisible = ref(false)
 const currentOrder = ref(null)
+const productSelection = ref(null)
+const draggedLineIndex = ref(null)
 
-const defaultItem = () => ({
-  product_id: null, batch_no: '', production_date: null,
-  expiry_date: null, quantity: 1, unit_price: 1, remark: ''
+const defaultPurchase = () => ({
+  supplier_id: null,
+  purchase_date: new Date().toISOString().slice(0, 19),
+  operator: '',
+  remark: '',
+  items: [],
 })
 
-const newOrder = reactive({
-  supplier_id: null, purchase_date: null, operator: '', remark: '',
-  items: [defaultItem()]
-})
+const newPurchase = reactive(defaultPurchase())
+const totalAmount = computed(() => newPurchase.items.reduce((sum, item) => sum + lineAmount(item), 0))
 
-const totalAmount = computed(() => {
-  return newOrder.items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0)
-})
+function createLine(product) {
+  return {
+    line_id: `${product.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    product_id: product.id,
+    product_info: product,
+    batch_no: '',
+    production_date: null,
+    expiry_date: null,
+    quantity: 1,
+    unit_price: Number(product.purchase_price || 1),
+    remark: '',
+  }
+}
 
-const formatDate = (dateStr) => {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
+const lineAmount = item => Number(item.quantity || 0) * Number(item.unit_price || 0)
+const formatMoney = value => `¥${Number(value || 0).toFixed(2)}`
+const formatDate = value => value ? new Date(value).toLocaleString('zh-CN') : '-'
+
+function expiryStatus(item) {
+  const days = getDaysToExpiry(item.expiry_date)
+  if (days == null) return { type: 'info', text: '未填写到期日' }
+  if (days < 0) return { type: 'danger', text: `已过期 ${Math.abs(days)} 天` }
+  if (days <= 30) return { type: 'warning', text: `临期：剩余 ${days} 天` }
+  return { type: 'success', text: `剩余 ${days} 天` }
 }
 
 const loadData = async () => {
@@ -217,90 +197,174 @@ const loadData = async () => {
       params.start_date = filterDate.value[0]
       params.end_date = filterDate.value[1]
     }
-    if (filterSupplier.value) {
-      params.supplier_id = filterSupplier.value
-    }
+    if (filterSupplier.value) params.supplier_id = filterSupplier.value
     orders.value = await getPurchaseOrders(params)
   } finally {
     loading.value = false
   }
 }
 
-const loadSuppliers = async () => {
-  suppliers.value = await getSuppliers()
-}
-
+const loadSuppliers = async () => { suppliers.value = await getSuppliers() }
 const loadProducts = async () => {
   const data = await getProducts({ page_size: 100, is_active: true })
   products.value = data.items || []
 }
 
-const openCreateDialog = () => {
-  Object.assign(newOrder, {
-    supplier_id: null, purchase_date: new Date().toISOString().slice(0, 19),
-    operator: '', remark: '', items: [defaultItem()]
+function resetPurchase() {
+  Object.assign(newPurchase, defaultPurchase())
+  productSelection.value = null
+}
+
+function restoreDraft(draft) {
+  const fallback = defaultPurchase()
+  Object.assign(newPurchase, {
+    ...fallback,
+    ...draft,
+    items: (draft.items || []).filter(item => item?.product_id).map(item => ({
+      ...item,
+      line_id: item.line_id || `${item.product_id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      product_info: products.value.find(product => product.id === item.product_id) || item.product_info,
+    })),
   })
+}
+
+const openCreateDialog = async () => {
+  const draft = readJson(window.localStorage, UI_STORAGE_KEYS.purchaseDraft, null)
+  if (draft?.supplier_id || draft?.items?.length) {
+    try {
+      await ElMessageBox.confirm('检测到一张尚未提交的入库草稿，是否恢复？', '恢复草稿', {
+        confirmButtonText: '恢复草稿', cancelButtonText: '新建空白单据', type: 'info',
+      })
+      restoreDraft(draft)
+    } catch {
+      resetPurchase()
+    }
+  } else {
+    resetPurchase()
+  }
   createDialogVisible.value = true
 }
 
-const addItem = () => {
-  newOrder.items.push(defaultItem())
+async function clearPurchaseDraft() {
+  resetPurchase()
+  await nextTick()
+  removeKey(window.localStorage, UI_STORAGE_KEYS.purchaseDraft)
+  ElMessage.success('入库草稿已清空')
 }
 
-const removeItem = (index) => {
-  if (newOrder.items.length > 1) {
-    newOrder.items.splice(index, 1)
-  } else {
-    ElMessage.warning('至少保留一条明细')
-  }
+function appendProduct(productId) {
+  const product = products.value.find(candidate => candidate.id === productId)
+  productSelection.value = null
+  if (!product) return
+  newPurchase.items.push(createLine(product))
+}
+
+function removeItem(index) {
+  newPurchase.items.splice(index, 1)
+}
+
+function dropLine(index) {
+  const from = draggedLineIndex.value
+  if (from == null || from === index) return
+  const [moved] = newPurchase.items.splice(from, 1)
+  newPurchase.items.splice(index, 0, moved)
+  draggedLineIndex.value = null
 }
 
 const submitOrder = async () => {
-  if (!newOrder.supplier_id) {
+  if (!newPurchase.supplier_id) {
     ElMessage.warning('请选择供应商')
     return
   }
-  // 过滤掉未选择商品的行
-  const validItems = newOrder.items.filter(i => i.product_id)
-  if (!validItems.length) {
-    ElMessage.warning('请至少添加一条商品')
+  if (!newPurchase.items.length || newPurchase.items.some(item => !item.product_id || Number(item.quantity) <= 0 || Number(item.unit_price) <= 0)) {
+    ElMessage.warning('请至少选择一件数量和进价均大于 0 的商品')
     return
   }
-  if (validItems.some(i => i.quantity <= 0 || i.unit_price <= 0)) {
-    ElMessage.warning('数量和单价必须大于0')
-    return
-  }
-
   try {
-    await createPurchaseOrder({
-      supplier_id: newOrder.supplier_id,
-      purchase_date: newOrder.purchase_date,
-      operator: newOrder.operator,
-      remark: newOrder.remark,
-      items: validItems
+    await ElMessageBox.confirm(`确认提交本单 ${formatMoney(totalAmount.value)} 的入库单吗？`, '确认入库', {
+      type: 'warning', confirmButtonText: '确认提交', cancelButtonText: '继续编辑',
     })
-    ElMessage.success('入库成功')
+    submitting.value = true
+    await createPurchaseOrder(buildPurchasePayload(newPurchase))
+    removeKey(window.localStorage, UI_STORAGE_KEYS.purchaseDraft)
+    ElMessage.success('入库成功，库存批次已更新')
     createDialogVisible.value = false
-    loadData()
-  } catch (e) { /* handled */ }
+    await loadData()
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      // API interceptor already provides a user-facing backend error.
+    }
+  } finally {
+    submitting.value = false
+  }
 }
 
-const viewDetail = async (row) => {
+const viewDetail = async row => {
   currentOrder.value = await getPurchaseOrder(row.id)
   detailVisible.value = true
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async row => {
   try {
-    await ElMessageBox.confirm(`确定删除入库单"${row.order_no}"？`, '确认', { type: 'warning' })
+    await ElMessageBox.confirm(`确定删除入库单“${row.order_no}”吗？`, '确认删除', { type: 'warning' })
     await deletePurchaseOrder(row.id)
     ElMessage.success('删除成功')
-    loadData()
-  } catch { /* cancelled */ }
+    await loadData()
+  } catch {
+    // Cancelled deletion intentionally leaves the list unchanged.
+  }
 }
+
+// Front-end-only draft: preview metadata stays in the browser and buildPurchasePayload strips it before submission.
+watch(newPurchase, value => {
+  if (!createDialogVisible.value) return
+  writeJson(window.localStorage, UI_STORAGE_KEYS.purchaseDraft, JSON.parse(JSON.stringify(value)))
+}, { deep: true })
 
 onMounted(async () => {
   await Promise.all([loadSuppliers(), loadProducts()])
   loadData()
 })
 </script>
+
+<style scoped>
+.purchase-page { display: grid; gap: 16px; }
+.purchase-list-card { padding: 22px; }
+.section-eyebrow { margin: 0 0 4px; color: var(--yt-primary); font-size: 14px; font-weight: 700; }
+.page-header h2 { margin: 0; color: var(--yt-text); font-size: 22px; }
+.primary-action { min-height: 42px; font-size: 15px; }
+.purchase-filters :deep(.el-select) { width: min(100%, 190px); }
+.table-scroll-wrap { overflow-x: auto; }
+.business-table { min-width: 870px; }
+.detail-table { min-width: 700px; }
+.money-primary { color: var(--yt-primary); }
+.purchase-workspace { display: grid; grid-template-columns: minmax(285px, .78fr) minmax(570px, 1.42fr); gap: 16px; }
+.purchase-column { min-width: 0; padding: 16px; border: 1px solid var(--yt-border); border-radius: 8px; background: var(--yt-surface); }
+.column-heading { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 18px; }
+.column-heading > span { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: #fff; background: var(--yt-primary); font-weight: 700; }
+.column-heading h3 { margin: 0; color: var(--yt-text); font-size: 17px; }
+.column-heading p { margin: 3px 0 0; color: var(--yt-text-muted); font-size: 14px; line-height: 1.45; }
+.compact-form :deep(.el-form-item) { margin-bottom: 15px; }
+.compact-form :deep(.el-select), .compact-form :deep(.el-date-editor), .compact-form :deep(.el-input), .compact-form :deep(.el-textarea) { width: 100%; }
+.product-option { display: flex; justify-content: space-between; gap: 12px; }
+.product-option small { color: var(--yt-text-muted); }
+.form-divider { height: 1px; margin: 20px 0; background: var(--yt-border); }
+.purchase-lines { display: grid; gap: 8px; max-height: 510px; overflow-y: auto; padding-right: 3px; }
+.purchase-line { display: grid; grid-template-columns: auto minmax(115px, 1fr) minmax(112px, .8fr) 138px minmax(144px, 1fr) 108px 108px 90px auto; align-items: center; gap: 9px; padding: 10px; border: 1px solid var(--yt-border); border-radius: 6px; cursor: grab; }
+.purchase-line:active { cursor: grabbing; }
+.drag-handle { color: var(--yt-text-muted); }
+.line-product { display: grid; min-width: 0; gap: 3px; }
+.line-product strong { overflow: hidden; color: var(--yt-text); text-overflow: ellipsis; white-space: nowrap; }
+.line-product small { color: var(--yt-text-muted); font-size: 12px; }
+.purchase-line :deep(.el-date-editor), .purchase-line :deep(.el-input-number), .purchase-line :deep(.el-input) { width: 100%; }
+.expiry-field { display: grid; gap: 5px; }
+.expiry-field :deep(.el-tag) { justify-self: start; }
+.line-amount { color: var(--yt-primary); text-align: right; }
+.totals-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; padding: 14px; border-radius: 6px; background: var(--yt-page); }
+.totals-panel div { display: grid; gap: 4px; }
+.totals-panel span { color: var(--yt-text-muted); font-size: 13px; }
+.totals-panel strong { color: var(--yt-primary); font-size: 20px; }
+.preview-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+@media (max-width: 1100px) { .purchase-workspace { grid-template-columns: 1fr; } .purchase-lines { max-height: none; } }
+@media (max-width: 760px) { .purchase-list-card { padding: 16px; } .purchase-line { grid-template-columns: auto minmax(0, 1fr) auto; } .purchase-line > :not(.drag-handle):not(.line-product):not(:last-child) { grid-column: 2; } .purchase-line > :last-child { grid-column: 3; grid-row: 1; } .line-amount { text-align: left; } }
+</style>
