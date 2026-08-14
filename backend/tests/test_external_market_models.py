@@ -73,7 +73,9 @@ def test_external_market_schema_keeps_human_confirmation_and_key_status_explicit
     assert accepted.trend == "steady"
     assert accepted.remark == "confirmed against source"
     assert accepted.operator == "operator-a"
-    assert schemas.ExternalMarketSyncStatusResponse.model_fields.keys() == {"is_configured"}
+    assert schemas.ExternalMarketSyncStatusResponse.model_fields.keys() == {
+        "is_configured", "sync_time", "default_region", "last_run"
+    }
 
 
 def test_external_market_schedule_accepts_only_24_hour_times():

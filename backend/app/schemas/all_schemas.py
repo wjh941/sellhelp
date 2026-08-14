@@ -373,17 +373,19 @@ class ExternalMarketQuoteResponse(BaseModel):
     source_name: str
     source_url: str
     source_excerpt: str
+    observed_at: Optional[date] = None
     fetched_at: datetime
     price: Optional[float] = None
     unit: Optional[str] = None
     trend: Optional[str] = None
     status: str
+    dismissed_remark: Optional[str] = None
 
 
 class ExternalMarketQuoteAcceptCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    product_id: Optional[int] = None
+    product_id: Optional[int] = Field(None, gt=0)
     price: Optional[float] = None
     unit: Optional[str] = None
     trend: Optional[str] = None
@@ -398,12 +400,6 @@ class ExternalMarketQuoteDismissCreate(BaseModel):
     operator: Optional[str] = None
 
 
-class ExternalMarketSyncStatusResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    is_configured: bool
-
-
 class ExternalMarketSyncRunResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
@@ -416,6 +412,15 @@ class ExternalMarketSyncRunResponse(BaseModel):
     quotes_created: int
     duplicates_skipped: int
     failure_detail: Optional[str] = None
+
+
+class ExternalMarketSyncStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_configured: bool
+    sync_time: str
+    default_region: str
+    last_run: Optional[ExternalMarketSyncRunResponse] = None
 
 
 class ExternalMarketSyncScheduleUpdate(BaseModel):

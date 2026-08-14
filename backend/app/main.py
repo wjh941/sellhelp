@@ -21,6 +21,7 @@ from app.routers.sales_router import router as sales_router
 from app.routers.inventory_router import router as inventory_router
 from app.routers.return_router import router as return_router
 from app.routers.market_router import router as market_router
+from app.routers.external_market_router import router as external_market_router
 from app.routers.report_router import router as report_router
 from app.routers.export_router import router as export_router
 from app.routers.finance_router import router as finance_router
@@ -61,6 +62,7 @@ app.include_router(sales_router)
 app.include_router(inventory_router)
 app.include_router(return_router)
 app.include_router(market_router)
+app.include_router(external_market_router)
 app.include_router(report_router)
 app.include_router(export_router)
 app.include_router(finance_router)

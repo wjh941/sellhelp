@@ -375,6 +375,7 @@ class ExternalMarketQuote(Base):
     accepted_market_price_id = Column(Integer, ForeignKey("market_prices.id"), nullable=True)
     accepted_at = Column(DateTime, nullable=True)
     dismissed_at = Column(DateTime, nullable=True)
+    dismissed_remark = Column(Text, nullable=True)
 
 
 class ExternalMarketSyncRun(Base):
