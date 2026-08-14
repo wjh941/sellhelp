@@ -91,7 +91,7 @@
           </el-table-column>
           <el-table-column prop="region" label="地区" width="130" show-overflow-tooltip />
           <el-table-column label="来源" min-width="150" show-overflow-tooltip>
-            <template #default="{ row }"><a :href="row.source_url" target="_blank" rel="noopener noreferrer">{{ row.source_name }}</a></template>
+            <template #default="{ row }"><a v-if="safeSourceUrl(row.source_url)" :href="safeSourceUrl(row.source_url)" target="_blank" rel="noopener noreferrer">{{ row.source_name }}</a><span v-else>{{ row.source_name || '-' }}</span></template>
           </el-table-column>
           <el-table-column prop="source_excerpt" label="原始摘要" min-width="220" show-overflow-tooltip />
           <el-table-column label="抓取时间" width="170"><template #default="{ row }">{{ formatDate(row.fetched_at) }}</template></el-table-column>
@@ -156,6 +156,7 @@ import {
   acceptExternalMarketQuote, createMarketPrice, deleteMarketPrice, dismissExternalMarketQuote,
   getExternalMarketQuotes, getMarketPrices, getProducts, syncExternalMarketQuotes, updateMarketPrice
 } from '@/api'
+import { sanitizeExternalSourceUrl } from '@/utils/externalMarket'
 
 const activeTab = ref('manual')
 const loading = ref(false)
@@ -184,6 +185,7 @@ const getQuoteStatusLabel = (status) => ({ pending: '待确认', accepted: '已�
 const getQuoteStatusType = (status) => ({ pending: 'warning', accepted: 'success', dismissed: 'info' }[status] || 'info')
 const hasPrice = (quote) => quote.price !== null && quote.price !== undefined
 const formatDate = (value) => value ? new Date(value).toLocaleString('zh-CN') : '-'
+const safeSourceUrl = sanitizeExternalSourceUrl
 
 const loadData = async () => {
   loading.value = true
