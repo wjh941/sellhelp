@@ -32,6 +32,18 @@ $env:SELLHELP_DATABASE_URL = "sqlite:///C:/data/sellhelp.db"
 $env:SELLHELP_ALLOWED_ORIGINS = "http://localhost:8080,http://example.local"
 ```
 
+### External market sync
+
+Configure `ANYSEARCH_API_KEY` only in the backend server environment, then restart the backend for the change to take effect. Do not put this value in the browser, frontend build, or source control.
+
+```powershell
+$env:ANYSEARCH_API_KEY = "your-server-side-key"
+```
+
+By default, external market data syncs daily at `02:00` in the `Asia/Shanghai` timezone. The schedule can be changed in Settings. Network quotes are always pending review: they affect local market prices and pricing calculations only after an operator manually confirms them.
+
+The sync uses public price-monitoring information from the National Development and Reform Commission, public information from the National Food and Strategic Reserves Administration, and public retail search results. External content can be delayed, incomplete, or promotional, so operators must verify the source and retail context before accepting a quote.
+
 ## Verification
 
 Run backend tests:

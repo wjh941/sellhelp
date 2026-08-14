@@ -164,6 +164,36 @@
           </el-collapse>
         </div>
       </el-tab-pane>
+
+      <el-tab-pane label="行情同步" name="market-sync">
+        <div class="market-sync-panel" v-loading="marketSyncLoading">
+          <div class="page-header">
+            <h2>行情同步</h2>
+            <el-tooltip content="刷新同步状态" placement="top">
+              <el-button circle aria-label="刷新同步状态" @click="loadMarketSyncStatus">
+                <el-icon><Refresh /></el-icon>
+              </el-button>
+            </el-tooltip>
+          </div>
+
+          <el-descriptions :column="1" border v-if="marketSyncStatus" class="market-sync-status">
+            <el-descriptions-item label="服务端配置">
+              <el-tag :type="marketSyncStatus.is_configured ? 'success' : 'warning'">
+                {{ marketSyncStatus.is_configured ? '已配置' : '未配置' }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="默认地区">{{ marketSyncStatus.default_region }}</el-descriptions-item>
+            <el-descriptions-item label="最近运行">{{ formatMarketRun(marketSyncStatus.last_run) }}</el-descriptions-item>
+          </el-descriptions>
+
+          <el-form label-width="100px" class="market-sync-schedule" @submit.prevent="saveMarketSyncSchedule">
+            <el-form-item label="每日同步时间">
+              <el-input v-model="marketSyncTime" maxlength="5" placeholder="HH:MM" style="width: 140px;" />
+              <el-button type="primary" :loading="savingMarketSync" @click="saveMarketSyncSchedule">保存</el-button>
+            </el-form-item>
+          </el-form>
+        </div>
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -173,7 +203,8 @@ import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   getSystemInfo, backupDatabase, getBackups, 
-  restoreDatabase, deleteBackup as deleteBackupApi
+  getExternalMarketSyncStatus, restoreDatabase, deleteBackup as deleteBackupApi,
+  updateExternalMarketSyncSchedule
 } from '@/api'
 
 const activeTab = ref('info')
@@ -183,6 +214,10 @@ const infoLoading = ref(false)
 const backups = ref([])
 const backupLoading = ref(false)
 const backingUp = ref(false)
+const marketSyncStatus = ref(null)
+const marketSyncLoading = ref(false)
+const savingMarketSync = ref(false)
+const marketSyncTime = ref('')
 
 const formatSize = (bytes) => {
   if (!bytes) return '0 B'
@@ -204,6 +239,36 @@ const lastBackupTime = computed(() => {
   if (!backups.value.length) return '无'
   return formatDate(backups.value[0].created_at)
 })
+
+const formatMarketRun = (run) => {
+  if (!run) return '暂无运行记录'
+  const time = formatDate(run.finished_at || run.started_at)
+  const label = { success: '完成', partial: '部分完成', skipped: '已跳过' }[run.status] || '未完成'
+  return `${time}（${label}）`
+}
+
+const loadMarketSyncStatus = async () => {
+  marketSyncLoading.value = true
+  try {
+    marketSyncStatus.value = await getExternalMarketSyncStatus()
+    marketSyncTime.value = marketSyncStatus.value.sync_time
+  } catch (e) { /* Axios interceptor shows the backend error. */ }
+  finally { marketSyncLoading.value = false }
+}
+
+const saveMarketSyncSchedule = async () => {
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(marketSyncTime.value)) {
+    ElMessage.warning('请输入严格的 HH:MM 24 小时时间。')
+    return
+  }
+  savingMarketSync.value = true
+  try {
+    await updateExternalMarketSyncSchedule({ sync_time: marketSyncTime.value })
+    ElMessage.success('行情同步时间已更新。')
+    await loadMarketSyncStatus()
+  } catch (e) { /* Axios interceptor shows the backend error. */ }
+  finally { savingMarketSync.value = false }
+}
 
 const loadInfo = async () => {
   infoLoading.value = true
@@ -268,6 +333,7 @@ const handleDeleteBackup = async (row) => {
 onMounted(() => {
   loadInfo()
   loadBackups()
+  loadMarketSyncStatus()
 })
 </script>
 
@@ -284,4 +350,8 @@ onMounted(() => {
 .stat-card.blue { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
 .stat-card.orange { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
 .stat-card.green { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+.market-sync-panel { padding: 4px; }
+.market-sync-status { max-width: 560px; }
+.market-sync-schedule { margin-top: 20px; }
+.market-sync-schedule :deep(.el-form-item__content) { gap: 10px; }
 </style>

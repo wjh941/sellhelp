@@ -77,6 +77,13 @@ export const createMarketPrice = (data) => api.post('/market-prices', data)
 export const updateMarketPrice = (id, data) => api.put(`/market-prices/${id}`, data)
 export const deleteMarketPrice = (id) => api.delete(`/market-prices/${id}`)
 
+export const getExternalMarketQuotes = (params) => api.get('/external-market-quotes', { params })
+export const syncExternalMarketQuotes = () => api.post('/external-market-quotes/sync')
+export const acceptExternalMarketQuote = (id, data) => api.post(`/external-market-quotes/${id}/accept`, data)
+export const dismissExternalMarketQuote = (id, data) => api.post(`/external-market-quotes/${id}/dismiss`, data)
+export const getExternalMarketSyncStatus = () => api.get('/external-market-sync/status')
+export const updateExternalMarketSyncSchedule = (data) => api.put('/external-market-sync/schedule', data)
+
 export const calculatePricing = (productId) => api.post('/pricing/calculate', { product_id: productId })
 export const getPricingHistory = (params) => api.get('/pricing/history', { params })
 export const confirmPricing = (referenceId, operator) => api.post(`/pricing/${referenceId}/confirm`, null, { params: { operator } })
