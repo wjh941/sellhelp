@@ -106,6 +106,14 @@ test('persists ignored dashboard risks and restores only the dashboard preferenc
   assert.equal(storage.getItem(UI_STORAGE_KEYS.salesDraft), '{"customer_id": 9}')
 })
 
+test('falls back when a legacy ignored-risk preference is valid JSON but not an array', () => {
+  const storage = new MemoryStorage()
+  storage.setItem(UI_STORAGE_KEYS.ignoredRisks, '{"legacy":true}')
+  const saved = readJson(storage, UI_STORAGE_KEYS.ignoredRisks, [])
+  const ignored = Array.isArray(saved) ? saved : []
+  assert.deepEqual(ignored, [])
+})
+
 test('dashboard uses a named resize listener with unmount cleanup', async () => {
   const source = await readFile(new URL('../src/views/Dashboard.vue', import.meta.url), 'utf8')
   assert.match(source, /const onWindowResize\s*=\s*\(\)\s*=>/)
@@ -118,6 +126,25 @@ test('dashboard mounts chart containers before rendering chart instances', async
   const loadBlock = source.match(/const loadData = async \(\) => \{[\s\S]*?\n\}/)?.[0] || ''
   assert.ok(loadBlock.indexOf('loading.value = false') < loadBlock.indexOf('await nextTick()'))
   assert.ok(loadBlock.indexOf('await nextTick()') < loadBlock.indexOf('renderCharts()'))
+})
+
+test('dashboard gives hot and slow product rows semantic status tags', async () => {
+  const source = await readFile(new URL('../src/views/Dashboard.vue', import.meta.url), 'utf8')
+  assert.match(source, /v-for="row in hotProducts\.slice\(0, 3\)"[\s\S]*?<el-tag type="success"[^>]*>热销<\/el-tag>/)
+  assert.match(source, /v-for="row in slowProducts\.slice\(0, 3\)"[\s\S]*?<el-tag type="warning"[^>]*>30 天滞销<\/el-tag>/)
+})
+
+test('dashboard resizes the product trend chart only after expanding it', async () => {
+  const source = await readFile(new URL('../src/views/Dashboard.vue', import.meta.url), 'utf8')
+  const toggleBlock = source.match(/const toggleSection = async section => \{[\s\S]*?\n\}/)?.[0] || ''
+  assert.match(toggleBlock, /section === 'productTrend' && !collapsed\.value\.productTrend/)
+  assert.ok(toggleBlock.indexOf('await nextTick()') < toggleBlock.indexOf('productTrendChart?.resize()'))
+})
+
+test('dashboard normalizes a non-array ignored-risk preference before creating reactive state', async () => {
+  const source = await readFile(new URL('../src/views/Dashboard.vue', import.meta.url), 'utf8')
+  assert.match(source, /const savedIgnoredRiskIds = readJson\(window\.localStorage, UI_STORAGE_KEYS\.ignoredRisks, \[\]\)/)
+  assert.match(source, /const ignoredRiskIds = ref\(Array\.isArray\(savedIgnoredRiskIds\) \? savedIgnoredRiskIds : \[\]\)/)
 })
 
 test('selects VIP, retail, and wholesale customer prices', () => {

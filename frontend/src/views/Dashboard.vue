@@ -153,14 +153,14 @@
                 <h3>本周热销</h3>
                 <el-empty v-if="!hotProducts.length" description="暂无销售排行数据" :image-size="48" />
                 <button v-for="row in hotProducts.slice(0, 3)" :key="`hot-${row.product_id}`" class="trend-item" type="button" @click="goTo('/sales', { product_id: row.product_id })">
-                  <span>{{ row.product_name }}</span><strong>¥{{ money(row.amount) }}</strong>
+                  <span>{{ row.product_name }}</span><el-tag type="success" size="small">热销</el-tag><strong>¥{{ money(row.amount) }}</strong>
                 </button>
               </div>
               <div>
                 <h3>30 天滞销</h3>
                 <el-empty v-if="!slowProducts.length" description="暂无滞销商品" :image-size="48" />
                 <button v-for="row in slowProducts.slice(0, 3)" :key="`slow-${row.product_id}`" class="trend-item" type="button" @click="goTo('/stock', { product_id: row.product_id })">
-                  <span>{{ row.product_name }}</span><strong>¥{{ money(row.stock_value) }}</strong>
+                  <span>{{ row.product_name }}</span><el-tag type="warning" size="small">30 天滞销</el-tag><strong>¥{{ money(row.stock_value) }}</strong>
                 </button>
               </div>
             </div>
@@ -234,7 +234,8 @@ const lowStockAlerts = ref([])
 const debtCustomers = ref([])
 const overdueCustomers = ref([])
 const slowProducts = ref([])
-const ignoredRiskIds = ref(readJson(window.localStorage, UI_STORAGE_KEYS.ignoredRisks, []))
+const savedIgnoredRiskIds = readJson(window.localStorage, UI_STORAGE_KEYS.ignoredRisks, [])
+const ignoredRiskIds = ref(Array.isArray(savedIgnoredRiskIds) ? savedIgnoredRiskIds : [])
 const collapsed = ref({ expiry: false, lowStock: false, debt: false, productTrend: false })
 
 const weeklySalesChartRef = ref(null)
@@ -285,7 +286,13 @@ const goTo = (path, query = {}) => router.push({ path, query })
 const openExpiry = row => goTo('/stock', { product_id: row.product_id })
 const openLowStock = row => goTo('/purchase', { product_id: row.product_id })
 const openDebt = row => goTo('/finance', { customer_id: row.customer_id })
-const toggleSection = section => { collapsed.value[section] = !collapsed.value[section] }
+const toggleSection = async section => {
+  collapsed.value[section] = !collapsed.value[section]
+  if (section === 'productTrend' && !collapsed.value.productTrend) {
+    await nextTick()
+    productTrendChart?.resize()
+  }
+}
 const stockGap = row => Math.max(0, number(row.safe_stock) - number(row.current_stock))
 const expiryTag = row => row.warning_level === 'expired' || number(row.days_to_expiry) < 0 ? 'danger' : 'warning'
 const expiryLabel = row => row.warning_level === 'expired' || number(row.days_to_expiry) < 0 ? '已过期' : `临期 ${row.days_to_expiry ?? 0} 天`
