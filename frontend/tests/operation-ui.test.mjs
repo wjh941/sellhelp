@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 
 process.env.TZ = 'Asia/Shanghai'
 
@@ -57,6 +58,22 @@ test('persists a dark theme preference', () => {
   const storage = new MemoryStorage()
   assert.equal(writeTheme('dark', storage), true)
   assert.equal(readTheme(storage), 'dark')
+})
+
+test('defines complete Element Plus dark theme tokens', async () => {
+  const styles = await readFile(new URL('../src/styles/main.scss', import.meta.url), 'utf8')
+  const darkTheme = styles.match(/:root\[data-theme='dark'\]\s*\{[\s\S]*?\n\}/)?.[0] || ''
+
+  assert.match(darkTheme, /--el-bg-color-overlay: #2C313A;/)
+  assert.match(darkTheme, /--el-fill-color: #2C313A;/)
+  assert.match(darkTheme, /--el-fill-color-disabled: #2C313A;/)
+  for (const color of ['primary', 'success', 'warning', 'danger']) {
+    assert.match(styles, new RegExp(`--el-color-${color}-rgb:`))
+    assert.match(styles, new RegExp(`--el-color-${color}-dark-2:`))
+    for (const shade of [3, 5, 7, 8, 9]) {
+      assert.match(styles, new RegExp(`--el-color-${color}-light-${shade}:`))
+    }
+  }
 })
 
 test('writes and removes JSON values without throwing on unavailable storage', () => {
