@@ -295,7 +295,7 @@ class ReturnOrderResponse(BaseModel):
 class StockTakeItemCreate(BaseModel):
     product_id: int
     batch_id: Optional[int] = None
-    actual_quantity: float
+    actual_quantity: Annotated[float, Field(ge=0)]
     reason: Optional[str] = None
 
 class StockTakeBatchResponse(BaseModel):

@@ -72,6 +72,14 @@ def create_return(data: ReturnOrderCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="商品不存在")
 
     inventory_service = InventoryService(db)
+    selected_batch = None
+    if data.batch_id is not None:
+        selected_batch = db.query(ProductBatch).filter(ProductBatch.id == data.batch_id).first()
+        if not selected_batch:
+            raise HTTPException(status_code=400, detail="批次不存在")
+        if selected_batch.product_id != product.id:
+            raise HTTPException(status_code=400, detail="批次不属于该商品")
+
     # 客户退货：先检查是否有原销售单
     selected_batch_id = data.batch_id
     supplier_allocations = []
@@ -110,10 +118,8 @@ def create_return(data: ReturnOrderCreate, db: Session = Depends(get_db)):
 
     elif data.return_type == "供应商退货":
         # 供应商退货：从指定批次扣减
-        if data.batch_id:
-            batch = db.query(ProductBatch).filter(ProductBatch.id == data.batch_id).first()
-            if not batch:
-                raise HTTPException(status_code=400, detail="批次不存在")
+        if data.batch_id is not None:
+            batch = selected_batch
             if batch.expiry_date and batch.expiry_date <= date.today():
                 raise HTTPException(status_code=400, detail="批次已过期，无法退给供应商")
             if batch.remaining_quantity < data.quantity:
@@ -267,21 +273,24 @@ def confirm_stock_take(items: List[StockTakeItemCreate], db: Session = Depends(g
     inventory_service = InventoryService(db)
     results = []
 
+    validated_items = []
     for item in items:
         product = db.query(Product).filter(Product.id == item.product_id).first()
         if not product:
-            continue
+            raise HTTPException(status_code=400, detail="商品不存在")
+        if item.batch_id is None:
+            raise HTTPException(status_code=400, detail="盘点必须指定批次")
+        batch = db.query(ProductBatch).filter(ProductBatch.id == item.batch_id).first()
+        if not batch:
+            raise HTTPException(status_code=400, detail="批次不存在")
+        if batch.product_id != item.product_id:
+            raise HTTPException(status_code=400, detail="批次不属于该商品")
+        validated_items.append((item, product, batch))
 
-        if item.batch_id:
-            batch = db.query(ProductBatch).filter(ProductBatch.id == item.batch_id).first()
-            if not batch:
-                continue
-            system_qty = batch.remaining_quantity
-        else:
-            system_qty = inventory_service.get_product_total_stock(item.product_id)
-
+    for item, product, batch in validated_items:
+        system_qty = batch.remaining_quantity
         diff = item.actual_quantity - system_qty
-        diff_amount = diff * (batch.purchase_price if item.batch_id else (product.purchase_price or 0))
+        diff_amount = diff * batch.purchase_price
 
         stocktake = StockTake(
             take_date=today,
@@ -298,21 +307,19 @@ def confirm_stock_take(items: List[StockTakeItemCreate], db: Session = Depends(g
         db.flush()
 
         # 如果有差异且已确认，调整库存
-        if item.batch_id and diff != 0:
-            batch = db.query(ProductBatch).filter(ProductBatch.id == item.batch_id).first()
-            if batch:
-                batch.remaining_quantity = max(0, batch.remaining_quantity + diff)
-                InventoryService(db).record_movement(
-                    product_id=item.product_id,
-                    batch_id=batch.id,
-                    direction="inbound" if diff > 0 else "outbound",
-                    quantity=abs(diff),
-                    reason="stocktake_adjustment",
-                    reference_no=f"stocktake:{stocktake.id}",
-                    stock_take_id=stocktake.id,
-                    operator=item.operator if hasattr(item, "operator") else None,
-                    remark=item.reason,
-                )
+        if diff != 0:
+            batch.remaining_quantity = max(0, batch.remaining_quantity + diff)
+            inventory_service.record_movement(
+                product_id=item.product_id,
+                batch_id=batch.id,
+                direction="inbound" if diff > 0 else "outbound",
+                quantity=abs(diff),
+                reason="stocktake_adjustment",
+                reference_no=f"stocktake:{stocktake.id}",
+                stock_take_id=stocktake.id,
+                operator=item.operator if hasattr(item, "operator") else None,
+                remark=item.reason,
+            )
 
         results.append(StockTakeResponse.model_validate(stocktake))
 

@@ -170,10 +170,22 @@ def delete_purchase_order(order_id: int, db: Session = Depends(get_db)):
         if batch and batch.remaining_quantity < batch.total_quantity:
             raise HTTPException(status_code=400, detail="该入库单已有部分销售出库，无法删除")
 
+    inventory_service = InventoryService(db)
+
     # 回滚批次
     for item in order.items:
         batch = db.query(ProductBatch).filter(ProductBatch.purchase_item_id == item.id).first()
         if batch:
+            inventory_service.record_movement(
+                product_id=batch.product_id,
+                batch_id=batch.id,
+                direction="outbound",
+                quantity=batch.remaining_quantity,
+                reason="purchase_reversal",
+                reference_no=order.order_no,
+                purchase_order_id=order.id,
+                operator=order.operator,
+            )
             db.delete(batch)
 
     db.delete(order)

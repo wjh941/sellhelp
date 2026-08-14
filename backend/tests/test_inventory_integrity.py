@@ -3,10 +3,14 @@ from datetime import date
 import pytest
 
 from app.models.all_models import (
+    BatchOutbound,
     Customer,
     InventoryMovement,
     Product,
     ProductBatch,
+    PurchaseOrder,
+    ReturnOrder,
+    StockTake,
     Supplier,
 )
 from app.services.inventory_service import InventoryService
@@ -118,6 +122,93 @@ def test_sale_records_outbound_movement_and_delete_records_reversal(client, db_s
     ]
 
 
+def test_purchase_delete_records_reversal_before_deleting_unconsumed_batch(client, db_session):
+    product = Product(name="Delete purchase product", unit="unit")
+    supplier = Supplier(name="Delete purchase supplier")
+    db_session.add_all([product, supplier])
+    db_session.commit()
+
+    created = client.post(
+        "/api/purchase-orders",
+        json={
+            "supplier_id": supplier.id,
+            "operator": "buyer",
+            "items": [{"product_id": product.id, "batch_no": "B-DELETE", "quantity": 4, "unit_price": 3}],
+        },
+    )
+    assert created.status_code == 200
+    order_id = created.json()["id"]
+    order_no = created.json()["order_no"]
+    batch_id = db_session.query(ProductBatch).filter(ProductBatch.purchase_item_id.isnot(None)).one().id
+
+    deleted = client.delete(f"/api/purchase-orders/{order_id}")
+
+    assert deleted.status_code == 200
+    assert db_session.get(ProductBatch, batch_id) is None
+    reversal = db_session.query(InventoryMovement).filter(
+        InventoryMovement.reason == "purchase_reversal"
+    ).one()
+    assert (reversal.direction, reversal.quantity, reversal.reference_no) == ("outbound", 4, order_no)
+    assert reversal.purchase_order_id == order_id
+    assert reversal.batch_id == batch_id
+
+
+def test_repeated_outbound_confirmation_is_idempotent(client, db_session):
+    product, customer, _, batch = make_product(db_session)
+    sale = client.post(
+        "/api/sales-orders",
+        json={
+            "customer_id": customer.id,
+            "items": [{"product_id": product.id, "quantity": 2, "unit_price": 6}],
+        },
+    )
+    assert sale.status_code == 200
+    sales_item_id = sale.json()["items"][0]["id"]
+    service = InventoryService(db_session)
+
+    service.confirm_outbound(sales_item_id, product.id, 2)
+    db_session.commit()
+
+    assert db_session.get(ProductBatch, batch.id).remaining_quantity == pytest.approx(8)
+    assert db_session.query(BatchOutbound).filter(BatchOutbound.sales_item_id == sales_item_id).count() == 1
+    assert len(movement_rows(db_session, product_id=product.id)) == 1
+
+
+def test_duplicate_product_lines_use_the_previewed_batch_allocations(client, db_session):
+    product, customer, _, first_batch = make_product(db_session, quantity=3)
+    second_batch = ProductBatch(
+        product_id=product.id,
+        batch_no="B-DUPLICATE-SECOND",
+        purchase_price=7,
+        total_quantity=3,
+        remaining_quantity=3,
+        expiry_date=None,
+    )
+    db_session.add(second_batch)
+    db_session.commit()
+
+    sale = client.post(
+        "/api/sales-orders",
+        json={
+            "customer_id": customer.id,
+            "items": [
+                {"product_id": product.id, "quantity": 2, "unit_price": 6},
+                {"product_id": product.id, "quantity": 2, "unit_price": 6},
+            ],
+        },
+    )
+
+    assert sale.status_code == 200
+    outbounds = db_session.query(BatchOutbound).join(BatchOutbound.sales_item).order_by(BatchOutbound.id).all()
+    assert [(row.batch_id, row.outbound_quantity, row.unit_cost) for row in outbounds] == [
+        (first_batch.id, 2, 3),
+        (first_batch.id, 1, 3),
+        (second_batch.id, 1, 7),
+    ]
+    assert db_session.get(ProductBatch, first_batch.id).remaining_quantity == pytest.approx(0)
+    assert db_session.get(ProductBatch, second_batch.id).remaining_quantity == pytest.approx(2)
+
+
 def test_supplier_return_without_batch_uses_saleable_stock_and_records_outbound(client, db_session):
     product, _, supplier, batch = make_product(db_session, expiry_date=date.today())
     saleable_batch = ProductBatch(
@@ -214,3 +305,101 @@ def test_customer_return_and_confirmed_stocktake_record_movements(client, db_ses
         ("inbound", 2, "customer_return"),
         ("inbound", 1, "stocktake_adjustment"),
     ]
+
+
+def test_customer_return_without_related_order_creates_real_batch(client, db_session):
+    product, customer, _, _ = make_product(db_session)
+
+    response = client.post(
+        "/api/returns",
+        json={
+            "return_type": CUSTOMER_RETURN,
+            "partner_id": customer.id,
+            "product_id": product.id,
+            "quantity": 1,
+            "refund_amount": 0,
+        },
+    )
+
+    assert response.status_code == 200
+    return_order = db_session.query(ReturnOrder).one()
+    assert return_order.batch_id is not None
+    batch = db_session.get(ProductBatch, return_order.batch_id)
+    assert batch is not None
+    assert batch.product_id == product.id
+    assert batch.remaining_quantity == pytest.approx(1)
+    assert movement_rows(db_session, product_id=product.id)[0].batch_id == batch.id
+
+
+@pytest.mark.parametrize("return_type", [CUSTOMER_RETURN, SUPPLIER_RETURN])
+def test_explicit_return_batch_must_belong_to_product(client, db_session, return_type):
+    product, customer, supplier, own_batch = make_product(db_session)
+    other_product = Product(name="Other return product", unit="unit")
+    other_batch = ProductBatch(
+        product=other_product,
+        batch_no="B-OTHER",
+        purchase_price=9,
+        total_quantity=5,
+        remaining_quantity=5,
+    )
+    db_session.add_all([other_product, other_batch])
+    db_session.commit()
+
+    response = client.post(
+        "/api/returns",
+        json={
+            "return_type": return_type,
+            "partner_id": customer.id if return_type == CUSTOMER_RETURN else supplier.id,
+            "product_id": product.id,
+            "batch_id": other_batch.id,
+            "quantity": 1,
+            "refund_amount": 0,
+        },
+    )
+
+    assert response.status_code == 400
+    assert db_session.get(ProductBatch, own_batch.id).remaining_quantity == pytest.approx(10)
+    assert db_session.get(ProductBatch, other_batch.id).remaining_quantity == pytest.approx(5)
+    assert movement_rows(db_session, product_id=product.id) == []
+
+
+def test_stocktake_rejects_batch_from_another_product(client, db_session):
+    product, _, _, own_batch = make_product(db_session)
+    other_product = Product(name="Other stocktake product", unit="unit")
+    other_batch = ProductBatch(
+        product=other_product,
+        batch_no="B-ST-OTHER",
+        purchase_price=9,
+        total_quantity=5,
+        remaining_quantity=5,
+    )
+    db_session.add_all([other_product, other_batch])
+    db_session.commit()
+
+    response = client.post(
+        "/api/stock-takes/confirm",
+        json=[{"product_id": product.id, "batch_id": other_batch.id, "actual_quantity": 4}],
+    )
+
+    assert response.status_code == 400
+    assert db_session.get(ProductBatch, own_batch.id).remaining_quantity == pytest.approx(10)
+    assert db_session.get(ProductBatch, other_batch.id).remaining_quantity == pytest.approx(5)
+    assert movement_rows(db_session, product_id=product.id) == []
+
+
+def test_stocktake_rejects_aggregate_adjustment_and_negative_actual_quantity(client, db_session):
+    product, _, _, _ = make_product(db_session)
+
+    aggregate = client.post(
+        "/api/stock-takes/confirm",
+        json=[{"product_id": product.id, "actual_quantity": 4}],
+    )
+    negative = client.post(
+        "/api/stock-takes/confirm",
+        json=[{"product_id": product.id, "batch_id": 1, "actual_quantity": -1}],
+    )
+
+    assert aggregate.status_code == 400
+    assert negative.status_code == 422
+    assert db_session.query(StockTake).count() == 0
+    assert movement_rows(db_session, product_id=product.id) == []

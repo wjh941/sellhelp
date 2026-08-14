@@ -108,6 +108,8 @@ class InventoryService:
         """
         确认出库：扣减批次库存，记录出库追踪
         """
+        if self.db.query(BatchOutbound.id).filter_by(sales_item_id=sales_item_id).first():
+            return
         allocations = self.find_fifo_batches(product_id, quantity)
         sales_item = self.db.query(SalesOrderItem).filter(SalesOrderItem.id == sales_item_id).first()
         reference_no = sales_item.sales_order.order_no if sales_item and sales_item.sales_order else None
