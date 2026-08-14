@@ -290,7 +290,9 @@ const toggleSection = async section => {
   collapsed.value[section] = !collapsed.value[section]
   if (section === 'productTrend' && !collapsed.value.productTrend) {
     await nextTick()
-    productTrendChart?.resize()
+    if (!collapsed.value.productTrend) {
+      productTrendChart?.resize()
+    }
   }
 }
 const stockGap = row => Math.max(0, number(row.safe_stock) - number(row.current_stock))

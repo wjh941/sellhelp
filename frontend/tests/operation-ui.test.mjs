@@ -139,6 +139,8 @@ test('dashboard resizes the product trend chart only after expanding it', async 
   const toggleBlock = source.match(/const toggleSection = async section => \{[\s\S]*?\n\}/)?.[0] || ''
   assert.match(toggleBlock, /section === 'productTrend' && !collapsed\.value\.productTrend/)
   assert.ok(toggleBlock.indexOf('await nextTick()') < toggleBlock.indexOf('productTrendChart?.resize()'))
+  const afterTick = toggleBlock.slice(toggleBlock.indexOf('await nextTick()'))
+  assert.match(afterTick, /if \(!collapsed\.value\.productTrend\) \{\s*productTrendChart\?\.resize\(\)/)
 })
 
 test('dashboard normalizes a non-array ignored-risk preference before creating reactive state', async () => {
