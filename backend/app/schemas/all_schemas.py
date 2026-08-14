@@ -2,7 +2,7 @@
 盈泰副食贸易管理系统 - Pydantic Schemas
 用于API请求/响应的数据验证
 """
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from datetime import datetime, date
 from decimal import Decimal
 from typing import Annotated, Any, List, Literal, Optional
@@ -359,6 +359,69 @@ class MarketPriceResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ========== 外部行情待确认账本 ==========
+class ExternalMarketQuoteResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+    id: int
+    product_name: Optional[str] = None
+    scope_label: str
+    region: str
+    quote_kind: str
+    source_name: str
+    source_url: str
+    source_excerpt: str
+    fetched_at: datetime
+    price: Optional[float] = None
+    unit: Optional[str] = None
+    trend: Optional[str] = None
+    status: str
+
+
+class ExternalMarketQuoteAcceptCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: Optional[int] = None
+    price: Optional[float] = None
+    unit: Optional[str] = None
+    trend: Optional[str] = None
+    remark: Optional[str] = None
+    operator: Optional[str] = None
+
+
+class ExternalMarketQuoteDismissCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    remark: Optional[str] = None
+    operator: Optional[str] = None
+
+
+class ExternalMarketSyncStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_configured: bool
+
+
+class ExternalMarketSyncRunResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+    id: int
+    trigger: str
+    region: str
+    started_at: datetime
+    finished_at: Optional[datetime] = None
+    status: str
+    quotes_created: int
+    duplicates_skipped: int
+    failure_detail: Optional[str] = None
+
+
+class ExternalMarketSyncScheduleUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sync_time: str = Field(..., pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
 
 # ========== AI定价 ==========

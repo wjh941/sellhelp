@@ -352,6 +352,52 @@ class MarketPrice(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+# ========== 外部行情待确认账本 ==========
+
+class ExternalMarketQuote(Base):
+    __tablename__ = "external_market_quotes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=True, index=True)
+    scope_label = Column(String(100), nullable=False)
+    region = Column(String(50), nullable=False)
+    quote_kind = Column(String(20), nullable=False)
+    source_name = Column(String(200), nullable=False)
+    source_url = Column(String(1000), nullable=False)
+    source_excerpt = Column(Text, nullable=False)
+    observed_at = Column(Date, nullable=True)
+    fetched_at = Column(DateTime, default=datetime.now, nullable=False)
+    price = Column(Float, nullable=True)
+    unit = Column(String(50), nullable=True)
+    trend = Column(String(20), nullable=True)
+    status = Column(String(20), default="pending", nullable=False, index=True)
+    quote_key = Column(String(64), unique=True, nullable=False, index=True)
+    accepted_market_price_id = Column(Integer, ForeignKey("market_prices.id"), nullable=True)
+    accepted_at = Column(DateTime, nullable=True)
+    dismissed_at = Column(DateTime, nullable=True)
+
+
+class ExternalMarketSyncRun(Base):
+    __tablename__ = "external_market_sync_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    trigger = Column(String(20), nullable=False)
+    region = Column(String(50), nullable=False)
+    started_at = Column(DateTime, default=datetime.now, nullable=False)
+    finished_at = Column(DateTime, nullable=True)
+    status = Column(String(20), nullable=False, index=True)
+    quotes_created = Column(Integer, default=0, nullable=False)
+    duplicates_skipped = Column(Integer, default=0, nullable=False)
+    failure_detail = Column(Text, nullable=True)
+
+
+class ExternalMarketSyncLock(Base):
+    __tablename__ = "external_market_sync_locks"
+
+    name = Column(String(50), primary_key=True)
+    acquired_at = Column(DateTime, default=datetime.now, nullable=False)
+
+
 # ========== 模块6：AI定价参考 ==========
 
 class PricingReference(Base):
