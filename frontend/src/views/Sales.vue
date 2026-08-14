@@ -349,7 +349,7 @@ const loadCustomers = async () => {
 }
 
 const loadProducts = async () => {
-  const data = await getProducts({ page_size: 500, is_active: true })
+  const data = await getProducts({ page_size: 100, is_active: true })
   products.value = data.items || []
 }
 

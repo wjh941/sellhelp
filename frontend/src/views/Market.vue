@@ -175,7 +175,7 @@ const loadData = async () => {
 }
 
 const loadProducts = async () => {
-  const data = await getProducts({ page_size: 500 })
+  const data = await getProducts({ page_size: 100 })
   products.value = data.items || []
 }
 
