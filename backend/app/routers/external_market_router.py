@@ -5,7 +5,8 @@ import json
 import os
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -57,7 +58,9 @@ def list_external_market_quotes(
 
 
 @router.post("/external-market-quotes/sync", response_model=ExternalMarketSyncRunResponse)
-def sync_external_market_quotes(db: Session = Depends(get_db)):
+def sync_external_market_quotes(request: Request, db: Session = Depends(get_db)):
+    if request.query_params:
+        raise HTTPException(status_code=422, detail="External market sync does not accept query controls")
     client = AnySearchClient()
     run = ExternalMarketSyncService(db, client).sync(trigger="manual")
     if run.status != "skipped" and not client.api_key:
@@ -89,6 +92,15 @@ def accept_external_market_quote(
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+
+    claim = db.execute(
+        update(ExternalMarketQuote)
+        .where(ExternalMarketQuote.id == quote_id, ExternalMarketQuote.status == "pending")
+        .values(status="accepting")
+    )
+    if claim.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="External market quote has already been processed")
 
     market_price = MarketPrice(
         record_date=quote.observed_at or date.today(),

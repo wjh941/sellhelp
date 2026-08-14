@@ -2,7 +2,7 @@
 盈泰副食贸易管理系统 - 数据库配置
 本地单机版 SQLite 数据库
 """
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os
@@ -48,3 +48,11 @@ def get_db():
 def init_db():
     """初始化数据库表"""
     Base.metadata.create_all(bind=engine)
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as connection:
+        inspector = inspect(connection)
+        if inspector.has_table("external_market_quotes") and "dismissed_remark" not in {
+            column["name"] for column in inspector.get_columns("external_market_quotes")
+        }:
+            connection.exec_driver_sql("ALTER TABLE external_market_quotes ADD COLUMN dismissed_remark TEXT")

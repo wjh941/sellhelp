@@ -1,6 +1,11 @@
 import json
 from datetime import date, datetime
 
+import pytest
+from sqlalchemy import create_engine, inspect, update
+from sqlalchemy.orm import sessionmaker
+
+from app import database
 from app.models.all_models import (
     ExternalMarketQuote,
     ExternalMarketSyncLock,
@@ -72,13 +77,30 @@ def test_manual_sync_uses_fixed_manual_trigger_and_persists_pending_quotes(clien
             return [SearchResult("Market bulletin", "https://source.example.test/new", "Price is \u00a56.80")]
 
     monkeypatch.setattr(external_market_router, "AnySearchClient", FakeSearchClient)
-    response = client.post("/api/external-market-quotes/sync", params={"region": "ignored"})
+    response = client.post("/api/external-market-quotes/sync")
 
     assert response.status_code == 200
     assert response.json()["trigger"] == "manual"
     assert response.json()["status"] == "success"
     assert db_session.query(ExternalMarketQuote).count() > 0
     assert db_session.query(MarketPrice).count() == 0
+
+
+@pytest.mark.parametrize("params", [{"region": "ignored"}, {"url": "https://source.example.test"}, {"query": "oil"}, {"source": "official"}])
+def test_manual_sync_rejects_client_controls_before_starting_sync(client, db_session, monkeypatch, params):
+    """Ignoring a client-supplied sync control would allow the server search scope to be overridden."""
+    from app.routers import external_market_router
+
+    class ExplodingSearchClient:
+        def __init__(self):
+            raise AssertionError("rejected requests must not initialize a search client")
+
+    monkeypatch.setattr(external_market_router, "AnySearchClient", ExplodingSearchClient)
+
+    response = client.post("/api/external-market-quotes/sync", params=params)
+
+    assert response.status_code == 422
+    assert db_session.query(ExternalMarketSyncRun).count() == 0
 
 
 def test_manual_sync_reports_configuration_error_without_exposing_secret(client, db_session, monkeypatch):
@@ -194,6 +216,48 @@ def test_accept_rejects_unknown_or_processed_quote_without_second_market_price(c
     assert db_session.query(MarketPrice).count() == 1
 
 
+def test_accept_rolls_back_pending_claim_when_market_price_creation_fails(client, db_session, monkeypatch):
+    """Leaving a failed conditional claim non-pending would permanently strand a reviewable quote."""
+    product = add_product(db_session)
+    quote = add_quote(db_session)
+    original_flush = db_session.flush
+
+    def fail_market_price_flush(*args, **kwargs):
+        raise RuntimeError("simulated write failure")
+
+    monkeypatch.setattr(db_session, "flush", fail_market_price_flush)
+    with pytest.raises(RuntimeError, match="simulated write failure"):
+        client.post(f"/api/external-market-quotes/{quote.id}/accept", json={"product_id": product.id})
+    monkeypatch.setattr(db_session, "flush", original_flush)
+
+    db_session.refresh(quote)
+    assert quote.status == "pending"
+    assert quote.accepted_market_price_id is None
+    assert db_session.query(MarketPrice).count() == 0
+
+
+def test_accept_returns_conflict_when_quote_stops_being_pending_before_claim(client, db_session, monkeypatch):
+    """A check-then-act acceptance path would create a price after another reviewer processed the quote."""
+    product = add_product(db_session)
+    quote = add_quote(db_session)
+    original_query = db_session.query
+
+    def query_after_concurrent_transition(*entities, **kwargs):
+        if entities == (Product,):
+            db_session.execute(
+                update(ExternalMarketQuote)
+                .where(ExternalMarketQuote.id == quote.id)
+                .values(status="dismissed")
+            )
+        return original_query(*entities, **kwargs)
+
+    monkeypatch.setattr(db_session, "query", query_after_concurrent_transition)
+    response = client.post(f"/api/external-market-quotes/{quote.id}/accept", json={"product_id": product.id})
+
+    assert response.status_code == 409
+    assert db_session.query(MarketPrice).count() == 0
+
+
 def test_dismiss_quote_records_auditable_remark_and_rejects_processed_quote(client, db_session):
     """Omitting the audit remark or allowing a second transition loses review accountability."""
     quote = add_quote(db_session)
@@ -258,3 +322,58 @@ def test_sync_schedule_validates_and_persists_a_strict_24_hour_time(client, db_s
     assert valid.status_code == 200
     assert valid.json()["sync_time"] == "18:05"
     assert db_session.query(SystemConfig).filter_by(key="external_market_sync_time").one().value == "18:05"
+
+
+def test_init_db_migrates_legacy_external_quote_table_with_dismissal_audit_column(monkeypatch):
+    """Without the compatibility migration, a Task 1 ledger cannot be dismissed after upgrading to Task 3."""
+    legacy_engine = create_engine("sqlite://")
+    with legacy_engine.begin() as connection:
+        connection.exec_driver_sql("""
+            CREATE TABLE external_market_quotes (
+                id INTEGER PRIMARY KEY,
+                product_id INTEGER,
+                scope_label VARCHAR(100) NOT NULL,
+                region VARCHAR(50) NOT NULL,
+                quote_kind VARCHAR(20) NOT NULL,
+                source_name VARCHAR(200) NOT NULL,
+                source_url VARCHAR(1000) NOT NULL,
+                source_excerpt TEXT NOT NULL,
+                observed_at DATE,
+                fetched_at DATETIME NOT NULL,
+                price FLOAT,
+                unit VARCHAR(50),
+                trend VARCHAR(20),
+                status VARCHAR(20) NOT NULL,
+                quote_key VARCHAR(64) NOT NULL UNIQUE,
+                accepted_market_price_id INTEGER,
+                accepted_at DATETIME,
+                dismissed_at DATETIME
+            )
+        """)
+    monkeypatch.setattr(database, "engine", legacy_engine)
+
+    database.init_db()
+    database.init_db()
+
+    assert "dismissed_remark" in {column["name"] for column in inspect(legacy_engine).get_columns("external_market_quotes")}
+    session = sessionmaker(bind=legacy_engine)()
+    try:
+        quote = ExternalMarketQuote(
+            scope_label="Edible oil",
+            region="National",
+            quote_kind="official_category",
+            source_name="Official bulletin",
+            source_url="https://source.example.test/legacy",
+            source_excerpt="Legacy quote.",
+            fetched_at=datetime(2026, 8, 14),
+            status="dismissed",
+            quote_key="legacy-quote",
+            dismissed_at=datetime(2026, 8, 14, 10, 0),
+            dismissed_remark="Not comparable",
+        )
+        session.add(quote)
+        session.commit()
+        assert session.query(ExternalMarketQuote).filter_by(dismissed_remark="Not comparable").one().status == "dismissed"
+    finally:
+        session.close()
+        legacy_engine.dispose()
