@@ -7,8 +7,10 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import App from './App.vue'
 import router from './router'
 import './styles/main.scss'
+import { readTheme } from './utils/operationUi'
 
 const app = createApp(App)
+document.documentElement.dataset.theme = readTheme(localStorage)
 
 // 注册所有Element Plus图标
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {

@@ -53,6 +53,12 @@ test('accepts only light and dark themes without overwriting invalid values', ()
   assert.equal(readTheme(storage, 'dark'), 'dark')
 })
 
+test('persists a dark theme preference', () => {
+  const storage = new MemoryStorage()
+  assert.equal(writeTheme('dark', storage), true)
+  assert.equal(readTheme(storage), 'dark')
+})
+
 test('writes and removes JSON values without throwing on unavailable storage', () => {
   const storage = new MemoryStorage()
   assert.equal(writeJson(storage, 'draft', { count: 2 }), true)
