@@ -144,9 +144,19 @@ def dismiss_external_market_quote(
     if quote.status != "pending":
         raise HTTPException(status_code=409, detail="External market quote has already been processed")
 
-    quote.status = "dismissed"
-    quote.dismissed_at = datetime.now()
-    quote.dismissed_remark = data.remark
+    claim = db.execute(
+        update(ExternalMarketQuote)
+        .where(ExternalMarketQuote.id == quote_id, ExternalMarketQuote.status == "pending")
+        .values(
+            status="dismissed",
+            dismissed_at=datetime.now(),
+            dismissed_remark=data.remark,
+        )
+    )
+    if claim.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="External market quote has already been processed")
+
     db.commit()
     db.refresh(quote)
     return _quote_response(quote, db)

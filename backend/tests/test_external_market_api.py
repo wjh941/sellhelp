@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 import pytest
 from sqlalchemy import create_engine, inspect, update
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Query, sessionmaker
 
 from app import database
 from app.models.all_models import (
@@ -275,6 +275,57 @@ def test_dismiss_quote_records_auditable_remark_and_rejects_processed_quote(clie
     assert quote.dismissed_at is not None
     assert quote.dismissed_remark == "Not comparable"
     assert db_session.query(MarketPrice).count() == 0
+
+
+def test_dismiss_returns_conflict_without_overwriting_a_concurrently_accepted_quote(client, db_session, monkeypatch):
+    """A direct dismissal write can overwrite an accepted quote and leave its price link inconsistent."""
+    product = add_product(db_session)
+    quote = add_quote(db_session)
+    original_first = Query.first
+    transitioned = False
+
+    def first_after_accept(query):
+        nonlocal transitioned
+        result = original_first(query)
+        if (
+            not transitioned
+            and query.column_descriptions[0]["entity"] is ExternalMarketQuote
+            and result is not None
+            and result.id == quote.id
+        ):
+            transitioned = True
+            accepting_session = sessionmaker(bind=db_session.get_bind())()
+            try:
+                market_price = MarketPrice(
+                    record_date=date(2026, 8, 14),
+                    product_id=product.id,
+                    price_type="network market reference",
+                )
+                accepting_session.add(market_price)
+                accepting_session.flush()
+                accepting_session.execute(
+                    update(ExternalMarketQuote)
+                    .where(ExternalMarketQuote.id == quote.id, ExternalMarketQuote.status == "pending")
+                    .values(
+                        status="accepted",
+                        accepted_market_price_id=market_price.id,
+                        accepted_at=datetime.now(),
+                    )
+                )
+                accepting_session.commit()
+            finally:
+                accepting_session.close()
+        return result
+
+    monkeypatch.setattr(Query, "first", first_after_accept)
+    response = client.post(f"/api/external-market-quotes/{quote.id}/dismiss", json={"remark": "No longer needed"})
+
+    assert response.status_code == 409
+    db_session.expire_all()
+    persisted_quote = db_session.query(ExternalMarketQuote).filter_by(id=quote.id).one()
+    assert persisted_quote.status == "accepted"
+    assert persisted_quote.accepted_market_price_id is not None
+    assert db_session.query(MarketPrice).filter_by(id=persisted_quote.accepted_market_price_id).one().product_id == product.id
 
 
 def test_sync_status_exposes_configuration_schedule_region_and_latest_run_without_secret(client, db_session, monkeypatch):
