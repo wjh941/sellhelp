@@ -95,6 +95,31 @@ test('writes and removes JSON values without throwing on unavailable storage', (
   assert.equal(removeKey(null, 'draft'), false)
 })
 
+test('persists ignored dashboard risks and restores only the dashboard preference', () => {
+  const storage = new MemoryStorage()
+  const ignored = ['expiry:batch-17', 'low-stock:product-4']
+  assert.equal(writeJson(storage, UI_STORAGE_KEYS.ignoredRisks, ignored), true)
+  assert.deepEqual(readJson(storage, UI_STORAGE_KEYS.ignoredRisks, []), ignored)
+  storage.setItem(UI_STORAGE_KEYS.salesDraft, '{"customer_id": 9}')
+  assert.equal(removeKey(storage, UI_STORAGE_KEYS.ignoredRisks), true)
+  assert.deepEqual(readJson(storage, UI_STORAGE_KEYS.ignoredRisks, []), [])
+  assert.equal(storage.getItem(UI_STORAGE_KEYS.salesDraft), '{"customer_id": 9}')
+})
+
+test('dashboard uses a named resize listener with unmount cleanup', async () => {
+  const source = await readFile(new URL('../src/views/Dashboard.vue', import.meta.url), 'utf8')
+  assert.match(source, /const onWindowResize\s*=\s*\(\)\s*=>/)
+  assert.match(source, /window\.addEventListener\('resize',\s*onWindowResize\)/)
+  assert.match(source, /onBeforeUnmount\(\(\)\s*=>\s*\{[\s\S]*window\.removeEventListener\('resize',\s*onWindowResize\)[\s\S]*\}\)/)
+})
+
+test('dashboard mounts chart containers before rendering chart instances', async () => {
+  const source = await readFile(new URL('../src/views/Dashboard.vue', import.meta.url), 'utf8')
+  const loadBlock = source.match(/const loadData = async \(\) => \{[\s\S]*?\n\}/)?.[0] || ''
+  assert.ok(loadBlock.indexOf('loading.value = false') < loadBlock.indexOf('await nextTick()'))
+  assert.ok(loadBlock.indexOf('await nextTick()') < loadBlock.indexOf('renderCharts()'))
+})
+
 test('selects VIP, retail, and wholesale customer prices', () => {
   const product = { vip_price: 7, retail_price: 9, wholesale_price: 5 }
   assert.equal(getCustomerUnitPrice(product, { is_vip: true, customer_type: '散户' }), 7)
