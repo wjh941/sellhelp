@@ -120,6 +120,20 @@ test('sales workspace keeps its create-order safety contract', async () => {
   assert.doesNotMatch(source, /createSalesOrder\(newOrder\)/)
 })
 
+test('sales workspace protects customer price selection, clearing, and print overlay behavior', async () => {
+  const source = await readFile(new URL('../src/views/Sales.vue', import.meta.url), 'utf8')
+  const clearDraft = source.match(/async function clearSalesDraft\(\) \{[\s\S]*?\n\}/)?.[0] || ''
+  const printRules = source.slice(source.indexOf('@media print {'))
+
+  assert.match(source, /class="product-select"\s+:disabled="!currentCustomer"/)
+  assert.match(source, /:close-on-press-escape="false"/)
+  assert.match(source, /modal-class="sales-create-modal"/)
+  assert.ok(clearDraft.indexOf('resetOrder()') < clearDraft.indexOf('await nextTick()'))
+  assert.ok(clearDraft.indexOf('await nextTick()') < clearDraft.indexOf('removeKey(window.localStorage, UI_STORAGE_KEYS.salesDraft)'))
+  assert.match(printRules, /:deep\(\.el-overlay:not\(\.sales-create-modal\)\)/)
+  assert.match(printRules, /\.delivery-note\s*\{[^}]*display:\s*block !important;/)
+})
+
 test('persists ignored dashboard risks and restores only the dashboard preference', () => {
   const storage = new MemoryStorage()
   const ignored = ['expiry:batch-17', 'low-stock:product-4']

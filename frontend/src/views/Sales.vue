@@ -65,7 +65,7 @@
     </div>
 
     <el-dialog v-model="createDialogVisible" title="新建销售单" width="min(1420px, calc(100vw - 40px))" top="4vh" draggable
-      destroy-on-close class="sales-create-dialog" @closed="draggedLineIndex = null">
+      modal-class="sales-create-modal" :close-on-press-escape="false" destroy-on-close class="sales-create-dialog" @closed="draggedLineIndex = null">
       <div class="order-workspace">
         <section class="order-column customer-column">
           <div class="column-heading"><span>1</span><div><h3>客户信息</h3><p>选择客户后自动匹配价目</p></div></div>
@@ -93,12 +93,13 @@
 
         <section class="order-column product-column">
           <div class="column-heading"><span>2</span><div><h3>选择商品</h3><p>选中后立即加入订单</p></div></div>
-          <el-select v-model="productSelection" filterable placeholder="输入商品名称或拼音搜索" class="product-select" @change="appendProduct">
+          <el-select v-model="productSelection" filterable placeholder="输入商品名称或拼音搜索" class="product-select" :disabled="!currentCustomer" @change="appendProduct">
             <el-option v-for="product in products" :key="product.id" :label="product.name" :value="product.id">
               <div class="product-option"><span>{{ product.name }}</span><small>库存 {{ product.current_stock ?? '-' }}</small></div>
             </el-option>
           </el-select>
-          <p class="selection-hint">商品价格按客户档次自动带入，正式售价请在商品档案中维护。</p>
+          <el-alert v-if="!currentCustomer" type="info" :closable="false" show-icon title="请先选择客户，确认适用价格后再选择商品。" />
+          <p v-else class="selection-hint">商品价格按客户档次自动带入，正式售价请在商品档案中维护。</p>
 
           <div class="form-divider"></div>
           <el-form label-position="top" class="compact-form">
@@ -192,7 +193,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   createSalesOrder, deleteSalesOrder, getCustomers, getProducts, getSalesOrder,
@@ -325,9 +326,10 @@ const openCreateDialog = async () => {
   createDialogVisible.value = true
 }
 
-function clearSalesDraft() {
-  removeKey(window.localStorage, UI_STORAGE_KEYS.salesDraft)
+async function clearSalesDraft() {
   resetOrder()
+  await nextTick()
+  removeKey(window.localStorage, UI_STORAGE_KEYS.salesDraft)
   ElMessage.success('销售草稿已清空')
 }
 
@@ -514,5 +516,5 @@ onBeforeUnmount(() => {
 .preview-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
 @media (max-width: 1100px) { .order-workspace { grid-template-columns: 1fr; } .order-lines { max-height: none; } }
 @media (max-width: 640px) { .sales-list-card { padding: 16px; } .order-line { grid-template-columns: auto minmax(0, 1fr) auto; } .order-line :deep(.el-input-number), .line-amount { grid-column: 2; } .order-line > :last-child { grid-column: 3; grid-row: 1; } }
-@media print { .sales-list-card, :deep(.el-overlay:not(.sales-create-dialog)), .preview-actions, :deep(.el-dialog__header), :deep(.el-dialog__footer), .customer-column, .product-column, .totals-panel { display: none !important; } .preview-column { display: block !important; border: 0; } .delivery-note { border-color: #000; } }
+@media print { .sales-list-card, :deep(.el-overlay:not(.sales-create-modal)), .preview-actions, :deep(.el-dialog__header), :deep(.el-dialog__footer), .customer-column, .product-column, .totals-panel { display: none !important; } :deep(.sales-create-modal), :deep(.sales-create-modal .el-overlay-dialog), :deep(.sales-create-modal .el-dialog) { position: static !important; display: block !important; width: 100% !important; margin: 0 !important; overflow: visible !important; box-shadow: none !important; background: #fff !important; } .preview-column { display: block !important; border: 0; } .delivery-note { display: block !important; border-color: #000; } }
 </style>
