@@ -95,6 +95,31 @@ test('writes and removes JSON values without throwing on unavailable storage', (
   assert.equal(removeKey(null, 'draft'), false)
 })
 
+test('keeps the sales draft local until a successful order submission clears it', () => {
+  const storage = new MemoryStorage()
+  const draft = {
+    customer_id: 7,
+    payment_type: '赊账',
+    items: [{ product_id: 11, quantity: 2, unit_price: 8 }],
+  }
+
+  assert.equal(writeJson(storage, UI_STORAGE_KEYS.salesDraft, draft), true)
+  assert.deepEqual(readJson(storage, UI_STORAGE_KEYS.salesDraft, null), draft)
+  assert.equal(removeKey(storage, UI_STORAGE_KEYS.salesDraft), true)
+  assert.equal(readJson(storage, UI_STORAGE_KEYS.salesDraft, null), null)
+})
+
+test('sales workspace keeps its create-order safety contract', async () => {
+  const source = await readFile(new URL('../src/views/Sales.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /<el-dialog[\s\S]*?draggable/)
+  assert.match(source, /const onWindowKeydown\s*=\s*event\s*=>/)
+  assert.match(source, /window\.removeEventListener\('keydown',\s*onWindowKeydown\)/)
+  assert.match(source, /createSalesOrder\(buildSalesPayload\(newOrder\)\)/)
+  assert.match(source, /window\.print\(\)/)
+  assert.doesNotMatch(source, /createSalesOrder\(newOrder\)/)
+})
+
 test('persists ignored dashboard risks and restores only the dashboard preference', () => {
   const storage = new MemoryStorage()
   const ignored = ['expiry:batch-17', 'low-stock:product-4']
