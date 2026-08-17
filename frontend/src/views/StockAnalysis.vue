@@ -1,312 +1,88 @@
 <template>
-  <div>
-    <el-tabs v-model="activeTab" type="border-card">
-      <!-- 滞销商品 -->
-      <el-tab-pane label="📦 滞销商品分析" name="slow">
-        <div class="page-card">
-          <div class="page-header">
-            <h2>滞销商品分析</h2>
-            <div class="actions">
-              <el-select v-model="slowDays" style="width: 140px;">
-                <el-option :value="7" label="7天无销量" />
-                <el-option :value="30" label="30天无销量" />
-                <el-option :value="60" label="60天无销量" />
-                <el-option :value="90" label="90天无销量" />
-              </el-select>
-              <el-button type="primary" @click="loadSlowProducts">分析</el-button>
-            </div>
-          </div>
-
-          <el-alert v-if="slowProducts.length === 0" type="success" :closable="false" style="margin-bottom: 16px;">
-            暂无滞销商品，库存状况良好！
-          </el-alert>
-
-          <el-table v-else :data="slowProducts" stripe v-loading="slowLoading">
-            <el-table-column prop="product_name" label="商品名称" min-width="150" />
-            <el-table-column prop="category" label="分类" width="100">
-              <template #default="{ row }">
-                <el-tag size="small">{{ row.category }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="current_stock" label="当前库存" width="100">
-              <template #default="{ row }">
-                <span class="warning-text">{{ row.current_stock }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="stock_value" label="库存价值" width="120">
-              <template #default="{ row }">
-                <span class="danger-text">¥{{ formatMoney(row.stock_value) }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="days_no_sales" label="无销售天数" width="100">
-              <template #default="{ row }">
-                <el-tag type="warning" size="small">{{ row.days_no_sales }}天</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="total_sales_qty" label="历史销量" width="100" />
-            <el-table-column label="操作" width="160">
-              <template #default="{ row }">
-                <el-button type="primary" size="small" link @click="showClearSuggestion(row)">清仓建议</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
+  <div class="analysis-page">
+    <el-tabs v-model="activeTab" class="analysis-tabs">
+      <el-tab-pane label="滞销商品" name="slow">
+        <section class="page-card">
+          <div class="section-heading"><div><p class="eyebrow">周转风险</p><h2>滞销商品分析</h2></div><div class="actions"><el-select v-model="slowDays" aria-label="无销售天数"><el-option :value="7" label="7 天无销售" /><el-option :value="30" label="30 天无销售" /><el-option :value="60" label="60 天无销售" /><el-option :value="90" label="90 天无销售" /></el-select><el-button type="primary" :loading="slowLoading" @click="loadSlowProducts">分析</el-button></div></div>
+          <el-alert v-if="slowError" type="error" :title="slowError" show-icon :closable="false" class="state-alert" />
+          <el-empty v-else-if="!slowLoading && !slowProducts.length" description="当前条件下没有滞销商品" />
+          <div v-else class="table-scroll" v-loading="slowLoading"><el-table :data="slowProducts" stripe height="460" table-layout="fixed"><el-table-column prop="product_name" label="商品名称" min-width="160" fixed="left" /><el-table-column prop="category" label="分类" min-width="110"><template #default="{ row }"><el-tag effect="plain">{{ row.category || '未分类' }}</el-tag></template></el-table-column><el-table-column prop="current_stock" label="当前库存" min-width="110" align="right" /><el-table-column prop="stock_value" label="库存价值" min-width="125" align="right"><template #default="{ row }"><span class="risk-text">¥{{ formatMoney(row.stock_value) }}</span></template></el-table-column><el-table-column prop="days_no_sales" label="无销售天数" min-width="125"><template #default="{ row }"><el-tag type="warning">{{ row.days_no_sales }} 天</el-tag></template></el-table-column><el-table-column prop="total_sales_qty" label="历史销量" min-width="110" align="right" /><el-table-column label="操作" min-width="125" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="showClearSuggestion(row)">清仓建议</el-button></template></el-table-column></el-table></div>
+        </section>
       </el-tab-pane>
 
-      <!-- 库存积压分析 -->
-      <el-tab-pane label="📊 库存健康分析" name="analysis">
-        <div class="page-card">
-          <div class="page-header">
-            <h2>库存健康分析</h2>
-            <el-button type="primary" @click="loadOverstock">重新分析</el-button>
-          </div>
-
-          <el-row :gutter="16" class="stat-row">
-            <el-col :span="8">
-              <div class="health-card" :class="healthLevel">
-                <div class="health-score">{{ analysis.health_score?.score || 0 }}</div>
-                <div class="health-level">{{ analysis.health_score?.level || '-' }}</div>
-                <div class="health-suggestion">{{ analysis.health_score?.suggestion || '暂无数据' }}</div>
-              </div>
-            </el-col>
-            <el-col :span="8">
-              <div class="stat-card blue">
-                <div class="stat-value">¥{{ formatMoney(analysis.total_stock_value) }}</div>
-                <div class="stat-label">库存总值</div>
-              </div>
-            </el-col>
-            <el-col :span="8">
-              <div class="stat-card orange">
-                <div class="stat-value">{{ analysis.product_count }}</div>
-                <div class="stat-label">商品数量</div>
-              </div>
-            </el-col>
-          </el-row>
-
-          <el-row :gutter="16">
-            <el-col :span="12">
-              <div style="margin-top: 16px;">
-                <h3>分类库存占比</h3>
-                <div ref="categoryChartRef" style="height: 300px;"></div>
-              </div>
-            </el-col>
-            <el-col :span="12">
-              <div style="margin-top: 16px;">
-                <h3>TOP10高价值商品</h3>
-                <el-table :data="analysis.top10_by_value || []" border size="small" max-height="280">
-                  <el-table-column prop="product_name" label="商品" min-width="120" />
-                  <el-table-column prop="stock_value" label="库存价值" width="120">
-                    <template #default="{ row }">¥{{ formatMoney(row.stock_value) }}</template>
-                  </el-table-column>
-                  <el-table-column prop="total_stock" label="数量" width="80" />
-                </el-table>
-              </div>
-            </el-col>
-          </el-row>
-
-          <div v-if="analysis.overstock_products?.length" style="margin-top: 16px;">
-            <h3 class="danger-text">⚠️ 库存占比过高商品</h3>
-            <el-alert
-              v-for="item in analysis.overstock_products"
-              :key="item.product_name"
-              type="warning"
-              :closable="false"
-              style="margin-bottom: 8px;"
-            >
-              <template #title>
-                <strong>{{ item.product_name }}</strong> 占比 {{ item.percentage }}%，库存价值 ¥{{ formatMoney(item.stock_value) }}
-              </template>
-            </el-alert>
-          </div>
-        </div>
+      <el-tab-pane label="库存健康" name="analysis">
+        <section class="page-card" v-loading="analysisLoading">
+          <div class="section-heading"><div><p class="eyebrow">库存结构</p><h2>库存健康分析</h2></div><el-button type="primary" @click="loadOverstock">重新分析</el-button></div>
+          <el-alert v-if="analysisError" type="error" :title="analysisError" show-icon :closable="false" class="state-alert" />
+          <template v-else-if="hasAnalysis">
+            <div class="summary-grid"><article class="health-card" :class="healthLevel"><span>库存健康评分</span><strong>{{ analysis.health_score?.score ?? '-' }}</strong><el-tag :type="healthTagType">{{ analysis.health_score?.level || '暂无评级' }}</el-tag><p>{{ analysis.health_score?.suggestion || '暂无建议' }}</p></article><article class="summary-card"><span>库存总值</span><strong>¥{{ formatMoney(analysis.total_stock_value) }}</strong></article><article class="summary-card"><span>在库商品数</span><strong>{{ analysis.product_count ?? 0 }}</strong></article><article class="summary-card warning"><span>高占用风险商品</span><strong>{{ riskSummary.length }}</strong></article></div>
+            <div class="analysis-grid"><section class="subsection"><h3>分类库存摘要</h3><div v-if="categorySummary.length" ref="categoryChartRef" class="category-chart" /><div v-else class="chart-empty">暂无分类库存数据</div><div v-if="categorySummary.length" class="category-list"><div v-for="item in categorySummary" :key="item.name" class="category-row"><span>{{ item.name }}</span><b>¥{{ formatMoney(item.value) }}</b><small>{{ item.count }} 个商品</small></div></div></section><section class="subsection"><h3>库存价值前十</h3><div class="table-scroll"><el-table :data="analysis.top10_by_value || []" size="default" stripe height="380" table-layout="fixed"><el-table-column prop="product_name" label="商品" min-width="140" /><el-table-column prop="stock_value" label="库存价值" min-width="120" align="right"><template #default="{ row }">¥{{ formatMoney(row.stock_value) }}</template></el-table-column><el-table-column prop="total_stock" label="数量" min-width="90" align="right" /></el-table></div></section></div>
+            <section class="subsection risk-section"><h3>高库存占用风险</h3><el-empty v-if="!riskSummary.length" description="暂无高库存占用风险" :image-size="70" /><div v-else class="risk-list"><div v-for="item in riskSummary" :key="item.product_name" class="risk-row"><div><strong>{{ item.product_name }}</strong><p>库存价值 ¥{{ formatMoney(item.stock_value) }}，当前库存 {{ item.current_stock }}</p></div><el-tag type="warning">占比 {{ item.percentage }}%</el-tag></div></div></section>
+          </template>
+          <el-empty v-else-if="!analysisLoading" description="暂无库存健康分析数据" />
+        </section>
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 清仓建议对话框 -->
-    <el-dialog v-model="suggestionVisible" title="滞销商品清仓建议" width="600px">
-      <template v-if="clearSuggestion">
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="商品">{{ clearSuggestion.product }}</el-descriptions-item>
-          <el-descriptions-item label="当前库存">{{ clearSuggestion.current_stock }}</el-descriptions-item>
-          <el-descriptions-item label="库存价值">¥{{ formatMoney(clearSuggestion.stock_value) }}</el-descriptions-item>
-          <el-descriptions-item label="当前售价">¥{{ clearSuggestion.current_price }}</el-descriptions-item>
-        </el-descriptions>
-
-        <el-divider content-position="left">建议价格</el-divider>
-        <el-row :gutter="16">
-          <el-col :span="8">
-            <div class="price-card">
-              <div class="price-label">清仓价</div>
-              <div class="price-value">¥{{ clearSuggestion.suggested_prices?.clearance_price }}</div>
-              <div class="price-desc">7折快速清仓</div>
-            </div>
-          </el-col>
-          <el-col :span="8">
-            <div class="price-card">
-              <div class="price-label">捆绑价</div>
-              <div class="price-value">¥{{ clearSuggestion.suggested_prices?.bundle_price }}</div>
-              <div class="price-desc">85折捆绑销售</div>
-            </div>
-          </el-col>
-          <el-col :span="8">
-            <div class="price-card">
-              <div class="price-label">保本价</div>
-              <div class="price-value">¥{{ clearSuggestion.suggested_prices?.break_even_price }}</div>
-              <div class="price-desc">成本+5%保本</div>
-            </div>
-          </el-col>
-        </el-row>
-
-        <el-divider content-position="left">AI建议</el-divider>
-        <ul>
-          <li v-for="(s, i) in clearSuggestion.suggestions" :key="i">{{ s }}</li>
-        </ul>
-
-        <el-divider content-position="left">行动建议</el-divider>
-        <ul>
-          <li v-for="(a, i) in clearSuggestion.actions" :key="i" class="action-item">▶ {{ a }}</li>
-        </ul>
-      </template>
-    </el-dialog>
+    <el-dialog v-model="suggestionVisible" title="滞销商品清仓建议" width="min(680px, calc(100vw - 32px))" draggable><template v-if="clearSuggestion"><el-descriptions :column="2" border><el-descriptions-item label="商品">{{ clearSuggestion.product }}</el-descriptions-item><el-descriptions-item label="当前库存">{{ clearSuggestion.current_stock }}</el-descriptions-item><el-descriptions-item label="库存价值">¥{{ formatMoney(clearSuggestion.stock_value) }}</el-descriptions-item><el-descriptions-item label="当前售价">¥{{ formatMoney(clearSuggestion.current_price) }}</el-descriptions-item></el-descriptions><h3 class="dialog-heading">建议价格</h3><div class="price-grid"><div><span>清仓价</span><b>¥{{ formatMoney(clearSuggestion.suggested_prices?.clearance_price) }}</b></div><div><span>捆绑价</span><b>¥{{ formatMoney(clearSuggestion.suggested_prices?.bundle_price) }}</b></div><div><span>保本价</span><b>¥{{ formatMoney(clearSuggestion.suggested_prices?.break_even_price) }}</b></div></div><h3 class="dialog-heading">行动建议</h3><ul class="suggestions"><li v-for="item in clearSuggestion.suggestions || clearSuggestion.actions || []" :key="item">{{ item }}</li></ul></template></el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, computed } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import { getSlowProducts, getClearSuggestion as getClearSuggestionApi, getOverstockAnalysis } from '@/api'
+import { getClearSuggestion as getClearSuggestionApi, getOverstockAnalysis, getSlowProducts } from '@/api'
 
 const activeTab = ref('slow')
 const slowDays = ref(30)
 const slowProducts = ref([])
 const slowLoading = ref(false)
-
+const slowError = ref('')
 const analysis = ref({})
 const analysisLoading = ref(false)
+const analysisError = ref('')
 const categoryChartRef = ref(null)
-let categoryChart = null
-
 const suggestionVisible = ref(false)
 const clearSuggestion = ref(null)
+let categoryChart = null
 
-const formatMoney = (val) => {
-  const num = Number(val) || 0
-  return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+const formatMoney = value => (Number(value) || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const hasAnalysis = computed(() => Object.keys(analysis.value || {}).length > 0)
+const categorySummary = computed(() => Object.entries(analysis.value.by_category || {}).map(([name, data]) => ({ name, value: Number(data?.value) || 0, count: Number(data?.count) || 0 })).sort((a, b) => b.value - a.value))
+const riskSummary = computed(() => analysis.value.overstock_products || [])
+const healthLevel = computed(() => ({ 优秀: 'health-good', 良好: 'health-ok', 一般: 'health-warn', 较差: 'health-bad' }[analysis.value.health_score?.level] || 'health-neutral'))
+const healthTagType = computed(() => ({ 优秀: 'success', 良好: 'success', 一般: 'warning', 较差: 'danger' }[analysis.value.health_score?.level] || 'info'))
 
-const healthLevel = computed(() => {
-  const level = analysis.value.health_score?.level
-  if (level === '优秀') return 'health-good'
-  if (level === '良好') return 'health-ok'
-  if (level === '一般') return 'health-warn'
-  return 'health-bad'
-})
-
-const loadSlowProducts = async () => {
-  slowLoading.value = true
-  try {
-    slowProducts.value = await getSlowProducts({ days: slowDays.value })
-  } catch (e) { /* handled */ }
-  finally {
-    slowLoading.value = false
-  }
-}
-
-const loadOverstock = async () => {
-  analysisLoading.value = true
-  try {
-    analysis.value = await getOverstockAnalysis()
-    await nextTick()
-    initCategoryChart()
-  } catch (e) { /* handled */ }
-  finally {
-    analysisLoading.value = false
-  }
-}
-
-const initCategoryChart = () => {
-  if (!categoryChartRef.value) return
-
+function renderCategoryChart() {
+  if (!categoryChartRef.value || !categorySummary.value.length) return
+  categoryChart?.dispose()
   categoryChart = echarts.init(categoryChartRef.value)
-  const byCategory = analysis.value.by_category || {}
-  const pieData = Object.entries(byCategory).map(([name, data]) => ({
-    name,
-    value: data.value
-  }))
-
-  categoryChart.setOption({
-    tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
-    legend: { orient: 'vertical', left: 'left' },
-    series: [{
-      type: 'pie',
-      radius: ['40%', '70%'],
-      data: pieData,
-      label: { formatter: '{b}\n¥{c}' }
-    }]
-  })
+  categoryChart.setOption({ color: ['#165DFF', '#00B42A', '#FF7D00', '#7A5AF8', '#14B8A6'], tooltip: { trigger: 'item', valueFormatter: value => `¥${formatMoney(value)}` }, legend: { bottom: 0, type: 'scroll' }, series: [{ type: 'pie', radius: ['42%', '68%'], label: { formatter: '{b}\n¥{c}' }, data: categorySummary.value }] })
 }
 
-const showClearSuggestion = async (row) => {
-  try {
-    clearSuggestion.value = await getClearSuggestionApi(row.product_id)
-    suggestionVisible.value = true
-  } catch (e) { /* handled */ }
+async function loadSlowProducts() {
+  slowLoading.value = true
+  slowError.value = ''
+  try { slowProducts.value = await getSlowProducts({ days: slowDays.value }) || [] } catch (error) { slowError.value = error?.message || '滞销商品分析加载失败' } finally { slowLoading.value = false }
 }
 
-onMounted(() => {
-  loadSlowProducts()
-  loadOverstock()
+async function loadOverstock() {
+  analysisLoading.value = true
+  analysisError.value = ''
+  try { analysis.value = await getOverstockAnalysis() || {}; await nextTick(); renderCategoryChart() } catch (error) { analysisError.value = error?.message || '库存健康分析加载失败' } finally { analysisLoading.value = false }
+}
 
-  window.addEventListener('resize', () => {
-    categoryChart?.resize()
-  })
-})
+async function showClearSuggestion(row) {
+  try { clearSuggestion.value = await getClearSuggestionApi(row.product_id); suggestionVisible.value = true } catch { ElMessage.error('清仓建议加载失败') }
+}
+
+const onWindowResize = () => categoryChart?.resize()
+onMounted(() => { loadSlowProducts(); loadOverstock(); window.addEventListener('resize', onWindowResize) })
+onBeforeUnmount(() => { window.removeEventListener('resize', onWindowResize); categoryChart?.dispose() })
 </script>
 
 <style scoped>
-.stat-row { margin-bottom: 16px; }
-.stat-card {
-  border-radius: 8px;
-  padding: 16px;
-  color: #fff;
-  text-align: center;
-}
-.stat-card .stat-value { font-size: 24px; font-weight: bold; }
-.stat-card .stat-label { font-size: 13px; opacity: 0.9; margin-top: 4px; }
-.stat-card.blue { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-.stat-card.orange { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-
-.warning-text { color: #E6A23C; font-weight: bold; }
-.danger-text { color: #F56C6C; font-weight: bold; }
-
-.health-card {
-  border-radius: 8px;
-  padding: 24px;
-  text-align: center;
-  border: 2px solid;
-}
-.health-card.health-good { border-color: #67C23A; background: #f0f9eb; }
-.health-card.health-ok { border-color: #409EFF; background: #ecf5ff; }
-.health-card.health-warn { border-color: #E6A23C; background: #fdf6ec; }
-.health-card.health-bad { border-color: #F56C6C; background: #fef0f0; }
-.health-score { font-size: 48px; font-weight: bold; }
-.health-good .health-score { color: #67C23A; }
-.health-ok .health-score { color: #409EFF; }
-.health-warn .health-score { color: #E6A23C; }
-.health-bad .health-score { color: #F56C6C; }
-.health-level { font-size: 18px; font-weight: bold; margin: 8px 0; }
-.health-suggestion { font-size: 13px; color: #606266; }
-
-.price-card {
-  border: 1px solid #dcdfe6;
-  border-radius: 8px;
-  padding: 12px;
-  text-align: center;
-  background: #f5f7fa;
-}
-.price-label { font-size: 12px; color: #909399; }
-.price-value { font-size: 20px; font-weight: bold; color: #409EFF; margin: 8px 0; }
-.price-desc { font-size: 11px; color: #909399; }
-.action-item { color: #409EFF; line-height: 1.8; }
+.analysis-page { display: grid; gap: 16px; }.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }.section-heading h2, .subsection h3 { margin: 3px 0 0; font-size: 20px; }.eyebrow { margin: 0; color: var(--el-text-color-secondary); font-size: 14px; }.actions { display: flex; gap: 10px; }.actions .el-select { width: 150px; }.state-alert { margin-bottom: 16px; }.summary-grid { display: grid; grid-template-columns: repeat(4, minmax(170px, 1fr)); gap: 14px; overflow-x: auto; }.summary-card, .health-card { min-width: 170px; padding: 16px; border: 1px solid var(--el-border-color-lighter); border-radius: 8px; background: var(--el-bg-color); }.summary-card span, .health-card span { color: var(--el-text-color-secondary); font-size: 14px; }.summary-card strong, .health-card strong { display: block; margin-top: 8px; font-size: 25px; }.summary-card.warning { border-color: #FFCC9F; }.health-card { border-color: var(--el-color-info-light-5); }.health-card.health-good { border-color: #A5E8B4; }.health-card.health-warn { border-color: #FFCC9F; }.health-card.health-bad { border-color: #FDB5B5; }.health-card p { margin: 8px 0 0; color: var(--el-text-color-secondary); font-size: 14px; }.analysis-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(430px, 1fr); gap: 16px; margin-top: 18px; }.subsection { min-width: 0; padding: 16px; border: 1px solid var(--el-border-color-lighter); border-radius: 8px; }.category-chart { height: 260px; }.chart-empty { display: grid; height: 260px; place-items: center; color: var(--el-text-color-secondary); font-size: 14px; }.category-list { display: grid; gap: 6px; }.category-row, .risk-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--el-border-color-lighter); font-size: 14px; }.category-row:last-child, .risk-row:last-child { border-bottom: 0; }.category-row small { color: var(--el-text-color-secondary); }.table-scroll { overflow-x: auto; }.table-scroll :deep(.el-table) { min-width: 430px; }.risk-section { margin-top: 16px; }.risk-list { margin-top: 10px; }.risk-row { grid-template-columns: 1fr auto; }.risk-row p { margin: 4px 0 0; color: var(--el-text-color-secondary); font-size: 14px; }.risk-text { color: #C45200; font-weight: 700; }.dialog-heading { margin: 20px 0 10px; font-size: 16px; }.price-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }.price-grid > div { padding: 12px; border-radius: 6px; background: var(--el-fill-color-light); }.price-grid span { display: block; color: var(--el-text-color-secondary); font-size: 14px; }.price-grid b { display: block; margin-top: 6px; color: var(--el-color-primary); font-size: 18px; }.suggestions { margin: 0; padding-left: 20px; line-height: 1.8; }
+@media (max-width: 920px) { .analysis-grid { grid-template-columns: 1fr; }.summary-grid { grid-template-columns: repeat(4, minmax(180px, 1fr)); } }.analysis-tabs :deep(.el-tabs__item) { min-height: 42px; font-size: 15px; }
 </style>
