@@ -125,7 +125,7 @@ export const getSystemConfig = () => api.get('/system/config')
 export const updateSystemConfig = (key, value, description) => api.put(`/system/config/${key}`, null, { params: { value, description } })
 export const getSystemInfo = () => api.get('/system/info')
 export const getSlowProducts = (params) => api.get('/system/slow-products', { params })
-export const getClearSuggestion = (productId) => api.get(`/system/slow-products/${productId}/clear-suggestion`)
+export const getClearSuggestion = (productId) => api.post(`/system/slow-products/${productId}/clear-suggestion`)
 export const getOverstockAnalysis = () => api.get('/system/overstock-analysis')
 
 // ========== 健康检查 ==========

@@ -80,3 +80,11 @@ test('updateExternalMarketSyncSchedule sends strict time data in the request bod
     method: 'put', url: '/external-market-sync/schedule', params: undefined, data: { sync_time: '02:15' }
   })
 })
+
+test('getClearSuggestion posts to the existing suggestion generator route', async () => {
+  await externalMarketApi.getClearSuggestion(12)
+
+  assert.deepEqual({ method: lastRequest().method, url: lastRequest().url, params: lastRequest().params, data: body(lastRequest()) }, {
+    method: 'post', url: '/system/slow-products/12/clear-suggestion', params: undefined, data: undefined
+  })
+})
