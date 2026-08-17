@@ -13,67 +13,67 @@
 
 所有上述界面保留既有后端接口和 SQLite 字段。主题、草稿、表格布局、局部筛选和模拟价格只保存在浏览器本地，不会修改服务端业务数据。
 
-## Prerequisites
+## 环境要求
 
 - Python 3.11
-- Node.js 18 or later
+- Node.js 18 或更高版本
 
-## Clean-clone setup
+## 全新克隆后的初始化
 
-From the repository root, install the backend and frontend dependencies:
+在仓库根目录安装后端和前端依赖：
 
 ```powershell
 pip install -r backend/requirements.txt
 npm ci --prefix frontend
 ```
 
-On Windows, run `start.bat` to initialize the local database and start both services. Open the frontend at http://localhost:8080 and the backend API documentation at http://localhost:8001/docs.
+在 Windows 上运行 `start.bat`，即可初始化本地数据库并启动前后端服务。前端访问地址为 http://localhost:8080，后端 API 文档地址为 http://localhost:8001/docs。
 
-For frontend-only development:
+仅开发前端时：
 
 ```powershell
 Set-Location frontend
 npm.cmd run dev
 ```
 
-The Vite development server listens on http://localhost:8080 by default and proxies existing API requests to the backend.
+Vite 开发服务器默认监听 http://localhost:8080，并将现有 API 请求代理到后端。
 
-## Configuration
+## 配置说明
 
-`SELLHELP_DATABASE_URL` overrides the default SQLite database connection. For example:
+`SELLHELP_DATABASE_URL` 可覆盖默认 SQLite 数据库连接，例如：
 
 ```powershell
 $env:SELLHELP_DATABASE_URL = "sqlite:///C:/data/sellhelp.db"
 ```
 
-`SELLHELP_ALLOWED_ORIGINS` is a comma-separated list of browser origins allowed by CORS. It defaults to `http://localhost:8080`:
+`SELLHELP_ALLOWED_ORIGINS` 是 CORS 允许访问的浏览器来源列表，使用逗号分隔，默认值为 `http://localhost:8080`：
 
 ```powershell
 $env:SELLHELP_ALLOWED_ORIGINS = "http://localhost:8080,http://example.local"
 ```
 
-### External market sync
+### 外部行情同步
 
-Configure `ANYSEARCH_API_KEY` only in the backend server environment, then restart the backend for the change to take effect. Do not put this value in the browser, frontend build, or source control.
+只在后端服务环境中配置 `ANYSEARCH_API_KEY`，然后重启后端使配置生效。不要将该值放入浏览器、前端构建产物或版本控制系统。
 
 ```powershell
 $env:ANYSEARCH_API_KEY = "your-server-side-key"
 ```
 
-By default, external market data syncs daily at `02:00` in the `Asia/Shanghai` timezone. The schedule can be changed in Settings. Network quotes are always pending review: they affect local market prices and pricing calculations only after an operator manually confirms them.
+默认情况下，外部行情数据会在 `Asia/Shanghai` 时区每天 `02:00` 同步。可在系统设置中调整计划。网络报价始终处于待审核状态，只有操作员手动确认后，才会影响本地行情价格和定价计算。
 
-The sync uses public price-monitoring information from the National Development and Reform Commission, public information from the National Food and Strategic Reserves Administration, and public retail search results. External content can be delayed, incomplete, or promotional, so operators must verify the source and retail context before accepting a quote.
+同步使用国家发展和改革委员会公开价格监测信息、国家粮食和物资储备局公开信息以及公开零售搜索结果。外部内容可能存在延迟、不完整或促销属性，操作员接受报价前必须核验来源和零售场景。
 
-## Verification
+## 验证
 
-Run backend tests:
+运行后端测试：
 
 ```powershell
 Set-Location backend
 python -m pytest -q
 ```
 
-Run all frontend checks:
+运行全部前端检查：
 
 ```powershell
 Set-Location frontend
@@ -81,15 +81,15 @@ npm.cmd test
 npm.cmd run build
 ```
 
-Build the frontend only:
+仅构建前端：
 
 ```powershell
 Set-Location frontend
 npm.cmd run build
 ```
 
-## Backup and recovery
+## 备份与恢复
 
-Database backups created by the application are stored under `backend/backup`. The system also creates a pre-restore backup there before a database restore.
+应用创建的数据库备份保存在 `backend/backup` 目录中。执行数据库恢复前，系统也会在该目录创建恢复前备份。
 
-Before running Alembic against a file-based SQLite database, stop the backend and copy the database file to a safe location. See `backend/ALEMBIC.md` for the non-destructive migration procedure.
+对文件型 SQLite 数据库执行 Alembic 前，请停止后端并将数据库文件复制到安全位置。非破坏性迁移步骤请参阅 `backend/ALEMBIC.md`。
