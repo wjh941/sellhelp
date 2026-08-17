@@ -1,305 +1,193 @@
 <template>
-  <div>
-    <div class="page-card">
+  <div class="reports-page">
+    <section class="page-card report-toolbar">
       <div class="page-header">
-        <h2>📊 每周经营分析报告</h2>
-        <div class="actions">
-          <el-button type="primary" @click="generateReport" :loading="generating">
-            <el-icon><Refresh /></el-icon>
-            {{ report ? '重新生成本周周报' : '生成本周周报' }}
-          </el-button>
-          <el-select v-model="selectedWeek" style="width: 120px;">
-            <el-option v-for="w in weekOptions" :key="w" :label="w" :value="w" />
-          </el-select>
+        <div>
+          <h2>周度经营报表</h2>
+          <p class="page-subtitle">使用已生成周报查看销售、库存和风险，不会在本页虚构业务数据。</p>
+        </div>
+        <div class="toolbar-actions">
+          <el-select v-model="selectedWeek" aria-label="选择生成周期"><el-option v-for="week in weekOptions" :key="week" :label="week" :value="week" /></el-select>
+          <el-button type="primary" size="large" :loading="generating" @click="generateReport"><el-icon><Refresh /></el-icon>{{ report ? '重新生成周报' : '生成周报' }}</el-button>
+          <el-button :disabled="!report" @click="exportReport"><el-icon><Download /></el-icon>导出数据</el-button>
+          <el-button type="warning" :disabled="!report" @click="printReport"><el-icon><Printer /></el-icon>打印 / 导出 PDF</el-button>
         </div>
       </div>
+      <el-alert v-if="requestError" type="error" :title="requestError" show-icon :closable="false" />
+    </section>
 
-      <div v-if="!report && !generating" style="text-align: center; padding: 60px; color: #909399;">
-        <el-icon style="font-size: 60px; margin-bottom: 20px;"><Document /></el-icon>
-        <p>还没有周报，点击上方按钮生成本周经营分析报告</p>
-      </div>
+    <section v-if="loading" class="page-card loading-state"><el-skeleton :rows="7" animated /></section>
+    <section v-else-if="!report" class="page-card empty-state"><el-empty description="暂无可预览的周报"><el-button type="primary" size="large" :loading="generating" @click="generateReport">生成本周周报</el-button></el-empty></section>
 
-      <div v-else-if="report" v-loading="loading">
-        <el-row :gutter="20" class="stat-row">
-          <el-col :span="6">
-            <div class="stat-card blue">
-              <div class="stat-value">¥{{ formatMoney(report.total_sales) }}</div>
-              <div class="stat-label">本周销售额</div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="stat-card green">
-              <div class="stat-value">¥{{ formatMoney(report.total_profit) }}</div>
-              <div class="stat-label">本周利润</div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="stat-card">
-              <div class="stat-value">{{ report.order_count }}</div>
-              <div class="stat-label">订单数</div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="stat-card orange">
-              <div class="stat-value">¥{{ formatMoney(report.stock_value) }}</div>
-              <div class="stat-label">库存总值</div>
-            </div>
-          </el-col>
-        </el-row>
+    <template v-else>
+      <section class="report-print-area">
+        <header class="report-cover">
+          <div><span class="report-kicker">经营周报</span><h1>{{ report.week_start }} 至 {{ report.week_end }}</h1><p>生成时间：{{ formatDate(report.created_at) }}</p></div>
+          <el-tag type="primary" effect="light">数据来自已生成周报</el-tag>
+        </header>
+        <div class="stat-grid">
+          <article class="stat-card sales"><span>本周销售额</span><strong>{{ formatMoney(report.total_sales) }}</strong></article>
+          <article class="stat-card profit"><span>本周利润</span><strong>{{ formatMoney(report.total_profit) }}</strong></article>
+          <article class="stat-card orders"><span>订单数</span><strong>{{ report.order_count || 0 }}</strong></article>
+          <article class="stat-card stock"><span>库存总值</span><strong>{{ formatMoney(report.stock_value) }}</strong></article>
+        </div>
+      </section>
 
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <div class="page-card" style="margin: 0;">
-              <h3>🔥 热销商品 TOP10</h3>
-              <el-table :data="hotProducts" size="small" stripe>
-                <el-table-column type="index" label="#" width="40" />
-                <el-table-column prop="product_name" label="商品" min-width="150" />
-                <el-table-column prop="total_amount" label="销售额" width="110">
-                  <template #default="{ row }">¥{{ formatMoney(row.total_amount) }}</template>
-                </el-table-column>
-                <el-table-column prop="total_qty" label="销量" width="80" />
-              </el-table>
-            </div>
-          </el-col>
-          <el-col :span="12">
-            <div class="page-card" style="margin: 0;">
-              <h3>💡 高利润商品 TOP10</h3>
-              <el-table :data="profitableProducts" size="small" stripe>
-                <el-table-column type="index" label="#" width="40" />
-                <el-table-column prop="product_name" label="商品" min-width="150" />
-                <el-table-column prop="total_profit" label="利润" width="110">
-                  <template #default="{ row }">
-                    <span style="color: #67C23A;">¥{{ formatMoney(row.total_profit) }}</span>
-                  </template>
-                </el-table-column>
-                <el-table-column label="利润率" width="90">
-                  <template #default="{ row }">
-                    <el-tag size="small" :type="row.profit_margin > 20 ? 'success' : row.profit_margin > 10 ? 'warning' : 'danger'">
-                      {{ row.profit_margin }}%
-                    </el-tag>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </div>
-          </el-col>
-        </el-row>
+      <section class="page-card report-filter-panel">
+        <div class="section-heading"><div><h3>本地筛选</h3><p>点击品类或输入商品名称，仅过滤当前已加载周报。</p></div></div>
+        <div class="report-filters">
+          <el-select v-model="selectedCategory" clearable placeholder="全部品类"><el-option v-for="category in categories" :key="category" :label="category" :value="category" /></el-select>
+          <el-input v-model="productKeyword" clearable placeholder="按商品名称筛选" />
+          <el-button text type="primary" @click="clearFilters">清空筛选</el-button>
+        </div>
+        <div v-if="categories.length" class="category-chips"><el-button v-for="category in categories" :key="category" :type="selectedCategory === category ? 'primary' : 'default'" size="small" @click="selectedCategory = selectedCategory === category ? '' : category">{{ category }}</el-button></div>
+      </section>
 
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <div class="page-card warning-card" v-if="slowProducts.length">
-              <h3>⚠️ 滞销商品（30天无销量）</h3>
-              <el-table :data="slowProducts" size="small" stripe>
-                <el-table-column prop="product_name" label="商品" min-width="150" />
-                <el-table-column prop="current_stock" label="库存" width="80" />
-                <el-table-column prop="stock_value" label="库存价值" width="110">
-                  <template #default="{ row }">
-                    <span style="color: #F56C6C;">¥{{ formatMoney(row.stock_value) }}</span>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="days_no_sales" label="天数" width="80" />
-              </el-table>
+      <section class="report-two-column">
+        <article class="page-card report-section">
+          <div class="section-heading"><div><h3>热销商品</h3><p>点击条目可按其品类筛选下方报表。</p></div><el-button text @click="toggleSection('hot')">{{ collapsed.hot ? '展开' : '收起' }}</el-button></div>
+          <template v-if="!collapsed.hot">
+            <el-empty v-if="!filteredHotProducts.length" description="当前筛选下暂无热销商品" :image-size="68" />
+            <div v-else class="mini-bars">
+              <el-tooltip v-for="row in filteredHotProducts.slice(0, 6)" :key="`${row.product_name}-${row.total_amount}`" :content="`${row.product_name}：销售额 ${formatMoney(row.total_amount)}，销量 ${row.total_qty || 0}`" placement="top">
+                <button class="mini-bar" type="button" @click="selectRowCategory(row)"><span>{{ row.product_name || '未命名商品' }}</span><i><b :style="{ width: barWidth(row.total_amount, filteredHotProducts) }"></b></i><strong>{{ formatMoney(row.total_amount) }}</strong></button>
+              </el-tooltip>
             </div>
-          </el-col>
-          <el-col :span="12">
-            <div class="page-card" v-if="overstockItems.length || expiredWarnings.length">
-              <h3>🚨 风险预警</h3>
-              <el-table :data="riskItems" size="small" stripe>
-                <el-table-column prop="type" label="风险类型" width="100">
-                  <template #default="{ row }">
-                    <el-tag :type="row.type === '临期' ? 'warning' : 'danger'" size="small">
-                      {{ row.type }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="name" label="商品" min-width="150" />
-                <el-table-column prop="detail" label="详情" min-width="180" />
-              </el-table>
-              <el-empty v-if="riskItems.length === 0" description="暂无风险" :image-size="80" />
-            </div>
-          </el-col>
-        </el-row>
-
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <div class="page-card">
-              <h3>📋 AI 下周建议</h3>
-              <div style="white-space: pre-wrap; line-height: 1.8;">{{ report.suggestions || '暂无建议' }}</div>
-            </div>
-          </el-col>
-          <el-col :span="12">
-            <div class="page-card business-advice">
-              <h3>🧠 商业思维周报</h3>
-              <div style="white-space: pre-wrap; line-height: 1.8;">{{ report.ai_business_advice || '暂无内容' }}</div>
-            </div>
-          </el-col>
-        </el-row>
-      </div>
-    </div>
-
-    <div class="page-card" v-if="historyReports.length">
-      <div class="page-header">
-        <h3>📚 历史周报</h3>
-      </div>
-      <el-table :data="historyReports" size="small">
-        <el-table-column prop="week_start" label="周开始" width="110" />
-        <el-table-column prop="week_end" label="周结束" width="110" />
-        <el-table-column prop="total_sales" label="销售额" width="120">
-          <template #default="{ row }">¥{{ formatMoney(row.total_sales) }}</template>
-        </el-table-column>
-        <el-table-column prop="total_profit" label="利润" width="120">
-          <template #default="{ row }">¥{{ formatMoney(row.total_profit) }}</template>
-        </el-table-column>
-        <el-table-column prop="order_count" label="订单数" width="90" />
-        <el-table-column prop="stock_value" label="库存值" width="120">
-          <template #default="{ row }">¥{{ formatMoney(row.stock_value) }}</template>
-        </el-table-column>
-        <el-table-column prop="created_at" label="生成时间" width="160">
-          <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="100">
-          <template #default="{ row }">
-            <el-button type="primary" size="small" link @click="viewReport(row)">查看</el-button>
+            <div class="table-scroll"><el-table :data="filteredHotProducts" stripe max-height="340"><el-table-column prop="product_name" label="商品" min-width="150" /><el-table-column :formatter="categoryLabel" label="品类" min-width="110" /><el-table-column label="销售额" width="118"><template #default="{ row }">{{ formatMoney(row.total_amount) }}</template></el-table-column><el-table-column prop="total_qty" label="销量" width="90" /></el-table></div>
           </template>
-        </el-table-column>
-      </el-table>
-    </div>
+        </article>
+        <article class="page-card report-section">
+          <div class="section-heading"><div><h3>高利润商品</h3><p>悬浮查看利润和利润率。</p></div><el-button text @click="toggleSection('profit')">{{ collapsed.profit ? '展开' : '收起' }}</el-button></div>
+          <template v-if="!collapsed.profit">
+            <el-empty v-if="!filteredProfitableProducts.length" description="当前筛选下暂无高利润商品" :image-size="68" />
+            <div v-else class="table-scroll"><el-table :data="filteredProfitableProducts" stripe max-height="380"><el-table-column prop="product_name" label="商品" min-width="150" /><el-table-column :formatter="categoryLabel" label="品类" min-width="110" /><el-table-column label="利润" width="118"><template #default="{ row }"><span class="profit-text">{{ formatMoney(row.total_profit) }}</span></template></el-table-column><el-table-column label="利润率" width="100"><template #default="{ row }"><el-tooltip :content="`利润率 ${formatPercent(row.profit_margin)}`"><el-tag :type="marginTagType(row.profit_margin)" size="small">{{ formatPercent(row.profit_margin) }}</el-tag></el-tooltip></template></el-table-column></el-table></div>
+          </template>
+        </article>
+      </section>
+
+      <section class="report-two-column">
+        <article class="page-card report-section">
+          <div class="section-heading"><div><h3>滞销商品</h3><p>30 天无销量的库存占用。</p></div><el-button text @click="toggleSection('slow')">{{ collapsed.slow ? '展开' : '收起' }}</el-button></div>
+          <template v-if="!collapsed.slow"><el-empty v-if="!filteredSlowProducts.length" description="当前筛选下暂无滞销商品" :image-size="68" /><div v-else class="table-scroll"><el-table :data="filteredSlowProducts" stripe max-height="330"><el-table-column prop="product_name" label="商品" min-width="150" /><el-table-column :formatter="categoryLabel" label="品类" min-width="110" /><el-table-column prop="current_stock" label="库存" width="90" /><el-table-column label="库存价值" width="118"><template #default="{ row }"><span class="risk-text">{{ formatMoney(row.stock_value) }}</span></template></el-table-column><el-table-column prop="days_no_sales" label="未销天数" width="100" /></el-table></div></template>
+        </article>
+        <article class="page-card report-section">
+          <div class="section-heading"><div><h3>风险预警</h3><p>临期、积压与欠款均以颜色和状态标签提示。</p></div><el-button text @click="toggleSection('risk')">{{ collapsed.risk ? '展开' : '收起' }}</el-button></div>
+          <template v-if="!collapsed.risk"><el-empty v-if="!riskItems.length" description="当前周报暂无风险项" :image-size="68" /><div v-else class="table-scroll"><el-table :data="riskItems" stripe max-height="330"><el-table-column label="风险" width="110"><template #default="{ row }"><el-tag :type="riskTagType(row.type)" size="small">{{ row.type }}</el-tag></template></el-table-column><el-table-column prop="name" label="对象" min-width="140" /><el-table-column prop="detail" label="说明" min-width="190" show-overflow-tooltip /></el-table></div></template>
+        </article>
+      </section>
+
+      <section class="report-two-column report-print-area">
+        <article class="page-card report-section"><div class="section-heading"><div><h3>下周经营建议</h3></div><el-button text @click="toggleSection('suggestions')">{{ collapsed.suggestions ? '展开' : '收起' }}</el-button></div><p v-if="!collapsed.suggestions" class="advice-text">{{ report.suggestions || '本周报未提供经营建议。' }}</p></article>
+        <article class="page-card report-section"><div class="section-heading"><div><h3>生意顾问摘要</h3></div><el-button text @click="toggleSection('advice')">{{ collapsed.advice ? '展开' : '收起' }}</el-button></div><p v-if="!collapsed.advice" class="advice-text">{{ report.ai_business_advice || '本周报未提供顾问摘要。' }}</p></article>
+      </section>
+    </template>
+
+    <section v-if="historyReports.length" class="page-card">
+      <div class="section-heading"><div><h3>历史周报</h3><p>打开历史周报不会重新生成数据。</p></div></div>
+      <div class="table-scroll"><el-table :data="historyReports" stripe v-loading="historyLoading"><el-table-column prop="week_start" label="周开始" width="112" /><el-table-column prop="week_end" label="周结束" width="112" /><el-table-column label="销售额" width="118"><template #default="{ row }">{{ formatMoney(row.total_sales) }}</template></el-table-column><el-table-column label="利润" width="118"><template #default="{ row }">{{ formatMoney(row.total_profit) }}</template></el-table-column><el-table-column prop="order_count" label="订单数" width="90" /><el-table-column label="操作" width="100" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="viewReport(row)">查看</el-button></template></el-table-column></el-table></div>
+    </section>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { generateReport as generateReportApi, getLatestReport, getReports, getReport } from '@/api'
+import { generateReport as generateReportApi, getLatestReport, getReport, getReports } from '@/api'
 
 const report = ref(null)
 const historyReports = ref([])
 const loading = ref(false)
+const historyLoading = ref(false)
 const generating = ref(false)
+const requestError = ref('')
 const selectedWeek = ref('本周')
 const weekOptions = ['本周', '上周', '两周前']
+const selectedCategory = ref('')
+const productKeyword = ref('')
+const collapsed = reactive({ hot: false, profit: false, slow: false, risk: false, suggestions: false, advice: false })
 
-const formatMoney = (val) => {
-  const num = Number(val) || 0
-  return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const parseItems = value => {
+  if (Array.isArray(value)) return value
+  if (!value) return []
+  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : [] } catch { return [] }
 }
+const hotProducts = computed(() => parseItems(report.value?.hot_products))
+const profitableProducts = computed(() => parseItems(report.value?.profitable_products))
+const slowProducts = computed(() => parseItems(report.value?.slow_products))
+const overstockItems = computed(() => parseItems(report.value?.overstock_risk))
+const expiredWarnings = computed(() => parseItems(report.value?.expired_warning))
+const customerDebts = computed(() => parseItems(report.value?.customer_debts))
+const itemCategory = row => row.category_name || row.category || '未分类'
+const categories = computed(() => [...new Set([...hotProducts.value, ...profitableProducts.value, ...slowProducts.value].map(itemCategory))].filter(Boolean))
+const filterProducts = items => items.filter(row => (!selectedCategory.value || itemCategory(row) === selectedCategory.value) && (!productKeyword.value.trim() || String(row.product_name || '').includes(productKeyword.value.trim())))
+const filteredHotProducts = computed(() => filterProducts(hotProducts.value))
+const filteredProfitableProducts = computed(() => filterProducts(profitableProducts.value))
+const filteredSlowProducts = computed(() => filterProducts(slowProducts.value))
+const riskItems = computed(() => [
+  ...expiredWarnings.value.map(item => ({ type: '临期', name: item.product_name || '未命名商品', detail: `剩余 ${item.remaining_quantity ?? '-'}，${item.days_to_expiry ?? '-'} 天到期` })),
+  ...overstockItems.value.map(item => ({ type: '积压', name: item.product_name || '未命名商品', detail: `库存价值 ${formatMoney(item.stock_value)}` })),
+  ...customerDebts.value.map(item => ({ type: '欠款', name: item.customer_name || item.name || '未命名客户', detail: `欠款 ${formatMoney(item.current_debt ?? item.debt ?? item.amount)}` })),
+])
 
-const formatDate = (dateStr) => {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
-}
-
-const hotProducts = computed(() => {
-  if (!report.value?.hot_products) return []
-  try {
-    return JSON.parse(report.value.hot_products)
-  } catch { return [] }
-})
-
-const profitableProducts = computed(() => {
-  if (!report.value?.profitable_products) return []
-  try {
-    return JSON.parse(report.value.profitable_products)
-  } catch { return [] }
-})
-
-const slowProducts = computed(() => {
-  if (!report.value?.slow_products) return []
-  try {
-    return JSON.parse(report.value.slow_products)
-  } catch { return [] }
-})
-
-const overstockItems = computed(() => {
-  if (!report.value?.overstock_risk) return []
-  try {
-    return JSON.parse(report.value.overstock_risk)
-  } catch { return [] }
-})
-
-const expiredWarnings = computed(() => {
-  if (!report.value?.expired_warning) return []
-  try {
-    return JSON.parse(report.value.expired_warning)
-  } catch { return [] }
-})
-
-const riskItems = computed(() => {
-  const items = []
-  // 临期
-  expiredWarnings.value.forEach(w => {
-    items.push({ type: '临期', name: w.product_name, detail: `剩余${w.remaining_quantity}，${w.days_to_expiry}天到期` })
-  })
-  // 积压
-  overstockItems.value.forEach(o => {
-    items.push({ type: '积压', name: o.product_name, detail: `库存价值¥${formatMoney(o.stock_value)}` })
-  })
-  return items
-})
-
-const generateReport = async () => {
-  generating.value = true
-  try {
-    // 计算日期范围
-    const endDate = new Date()
-    let startDate = new Date(endDate)
-
-    if (selectedWeek.value === '上周') {
-      endDate.setDate(endDate.getDate() - 7)
-      startDate.setDate(endDate.getDate() - 6)
-    } else if (selectedWeek.value === '两周前') {
-      endDate.setDate(endDate.getDate() - 14)
-      startDate.setDate(endDate.getDate() - 13)
-    } else {
-      startDate.setDate(startDate.getDate() - 6)
-    }
-
-    const endStr = endDate.toISOString().split('T')[0]
-    report.value = await generateReportApi({ end_date: endStr })
-    ElMessage.success('周报生成成功')
-    loadHistory()
-  } catch (e) { /* handled */ }
-  finally {
-    generating.value = false
-  }
-}
+const formatMoney = value => `¥${(Number(value) || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const formatDate = value => value ? new Date(value).toLocaleString('zh-CN') : '-'
+const formatPercent = value => `${(Number(value) || 0).toFixed(1)}%`
+const categoryLabel = row => itemCategory(row)
+const marginTagType = value => Number(value) >= 20 ? 'success' : Number(value) >= 10 ? 'warning' : 'danger'
+const riskTagType = type => type === '临期' ? 'warning' : type === '欠款' ? 'danger' : 'info'
+const barWidth = (value, items) => { const max = Math.max(...items.map(row => Number(row.total_amount) || 0), 1); return `${Math.max(8, Number(value || 0) / max * 100)}%` }
+const clearFilters = () => { selectedCategory.value = ''; productKeyword.value = '' }
+const selectRowCategory = row => { selectedCategory.value = itemCategory(row) }
+const toggleSection = section => { collapsed[section] = !collapsed[section] }
 
 const loadLatest = async () => {
   loading.value = true
-  try {
-    report.value = await getLatestReport()
-  } catch (e) {
-    // No report yet
-  } finally {
-    loading.value = false
-  }
+  requestError.value = ''
+  try { report.value = await getLatestReport() } catch (error) { if (error.response?.status !== 404) requestError.value = '周报加载失败，请稍后重试。' } finally { loading.value = false }
 }
-
 const loadHistory = async () => {
+  historyLoading.value = true
+  try { historyReports.value = await getReports({ limit: 20 }) } catch { requestError.value = '历史周报加载失败，请稍后重试。' } finally { historyLoading.value = false }
+}
+const generateReport = async () => {
+  generating.value = true
+  requestError.value = ''
   try {
-    historyReports.value = await getReports({ limit: 20 })
-  } catch { /* handled */ }
+    const endDate = new Date()
+    if (selectedWeek.value === '上周') endDate.setDate(endDate.getDate() - 7)
+    if (selectedWeek.value === '两周前') endDate.setDate(endDate.getDate() - 14)
+    report.value = await generateReportApi({ end_date: endDate.toLocaleDateString('en-CA') })
+    ElMessage.success('周报已生成。')
+    await loadHistory()
+  } catch { requestError.value = '周报生成失败，请稍后重试。' } finally { generating.value = false }
 }
-
-const viewReport = async (row) => {
-  report.value = await getReport(row.id)
+const viewReport = async row => {
+  loading.value = true
+  requestError.value = ''
+  try { report.value = await getReport(row.id); clearFilters() } catch { requestError.value = '历史周报加载失败，请稍后重试。' } finally { loading.value = false }
 }
+const exportReport = () => {
+  if (!report.value) return
+  const rows = [
+    ['周报区间', `${report.value.week_start} 至 ${report.value.week_end}`],
+    ['本周销售额', report.value.total_sales], ['本周利润', report.value.total_profit], ['订单数', report.value.order_count], ['库存总值', report.value.stock_value],
+    [], ['热销商品', '销售额', '销量'], ...filteredHotProducts.value.map(row => [row.product_name, row.total_amount, row.total_qty]),
+  ]
+  const csv = `\uFEFF${rows.map(row => row.map(cell => `"${String(cell ?? '').replaceAll('"', '""')}"`).join(',')).join('\n')}`
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `周度经营报表-${report.value.week_end || '未命名'}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+const printReport = () => window.print()
 
-onMounted(async () => {
-  await loadLatest()
-  loadHistory()
-})
+onMounted(async () => { await Promise.all([loadLatest(), loadHistory()]) })
 </script>
 
 <style scoped>
-.stat-row { margin-bottom: 20px; }
-.warning-card { border-left: 4px solid #F56C6C; }
-.business-advice {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-  border-radius: 8px;
-
-  h3 { color: #fff; }
-
-  div { color: rgba(255, 255, 255, 0.9); }
-}
+.reports-page { display: grid; gap: 20px; }.page-subtitle, .section-heading p { color: var(--color-muted); font-size: 14px; margin-top: 6px; }.toolbar-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; }.toolbar-actions :deep(.el-select) { width: 126px; }.toolbar-actions :deep(.el-input__wrapper), .toolbar-actions :deep(.el-select__wrapper) { min-height: 42px; }.loading-state, .empty-state { min-height: 300px; }.report-cover { align-items: flex-start; background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface)); border: 1px solid var(--color-border); border-radius: 8px; display: flex; justify-content: space-between; margin-bottom: 16px; padding: 22px; }.report-kicker { color: var(--color-primary); font-size: 14px; font-weight: 600; }.report-cover h1 { font-size: 22px; margin: 8px 0; }.report-cover p { color: var(--color-muted); font-size: 14px; }.stat-grid { display: grid; gap: 14px; grid-template-columns: repeat(4, minmax(0, 1fr)); }.stat-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; min-height: 116px; padding: 18px; }.stat-card span { color: var(--color-muted); font-size: 14px; }.stat-card strong { display: block; font-size: 25px; margin-top: 15px; }.stat-card.sales { background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface)); }.stat-card.profit { background: color-mix(in srgb, var(--color-success) 6%, var(--color-surface)); }.stat-card.orders { background: color-mix(in srgb, var(--color-warning) 7%, var(--color-surface)); }.stat-card.stock { background: color-mix(in srgb, #7B61FF 6%, var(--color-surface)); }.section-heading { align-items: flex-start; display: flex; justify-content: space-between; margin-bottom: 16px; }.section-heading h3 { font-size: 17px; }.report-filters { display: flex; flex-wrap: wrap; gap: 10px; }.report-filters :deep(.el-select), .report-filters :deep(.el-input) { width: 210px; }.report-filters :deep(.el-input__wrapper), .report-filters :deep(.el-select__wrapper) { min-height: 42px; }.category-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }.report-two-column { display: grid; gap: 20px; grid-template-columns: repeat(2, minmax(0, 1fr)); }.report-section { margin: 0; }.table-scroll { overflow-x: auto; }.table-scroll :deep(.el-table) { min-width: 560px; }.mini-bars { display: grid; gap: 10px; margin-bottom: 16px; }.mini-bar { align-items: center; background: transparent; border: 0; color: var(--color-text); cursor: pointer; display: grid; font: inherit; gap: 10px; grid-template-columns: minmax(100px, 1fr) minmax(100px, 1.8fr) auto; padding: 4px 0; text-align: left; width: 100%; }.mini-bar:hover span { color: var(--color-primary); }.mini-bar i { background: var(--el-fill-color); border-radius: 3px; height: 10px; overflow: hidden; }.mini-bar b { background: var(--color-primary); border-radius: inherit; display: block; height: 100%; }.mini-bar strong { font-size: 14px; }.profit-text { color: var(--color-success); font-weight: 600; }.risk-text { color: var(--color-danger); font-weight: 600; }.advice-text { line-height: 1.85; min-height: 90px; white-space: pre-wrap; }
+@media (max-width: 980px) { .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.report-two-column { grid-template-columns: 1fr; } }.report-cover { gap: 12px; }.toolbar-actions { justify-content: flex-start; }
+@media print { .report-toolbar, .report-filter-panel, .toolbar-actions, .page-card:not(.report-section) + .page-card { display: none !important; }.reports-page { display: block; }.report-print-area, .report-section { break-inside: avoid; }.report-cover, .stat-card, .page-card { box-shadow: none; }.report-two-column { display: grid; grid-template-columns: 1fr 1fr; } }
 </style>
