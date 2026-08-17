@@ -19,6 +19,10 @@ test('archive workspaces expose the required archive contracts', () => {
   assert.match(products, /dblclick|inline|inlineEdit/, 'products need guarded inline editing')
   assert.match(products, /remark|safe_stock/, 'inline editing scope must include note/safe stock fields')
   assert.match(products, /purchase_price|retail_price|wholesale_price|vip_price/, 'price fields remain formal fields')
+  assert.match(products, /session:\s*0/, 'inline edits need a stable session marker')
+  assert.match(products, /const editSession = inlineEdit\.session/, 'inline saves must capture their starting session')
+  assert.match(products, /inlineEdit\.session === session/, 'stale save guards must compare the captured session')
+  assert.match(products, /isCurrentInlineEdit\(editSession, row\.id, field\)/, 'stale saves may only clear or roll back their own edit session')
 
   assert.match(customers, /晨升膳食|VIP/, 'customers need the named VIP marker')
   assert.match(customers, /current_debt/, 'customers need debt field and status')

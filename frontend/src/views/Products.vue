@@ -141,7 +141,7 @@ const preferenceMessage = ref('')
 const dialogVisible = ref(false)
 const editingProduct = ref(null)
 const formRef = ref(null)
-const inlineEdit = reactive({ productId: null, field: '', value: null, original: null })
+const inlineEdit = reactive({ productId: null, field: '', value: null, original: null, session: 0 })
 
 const defaultForm = () => ({ code: '', name: '', category_id: null, spec: '', unit: '件', purchase_price: 0, retail_price: 0, wholesale_price: 0, vip_price: 0, safe_stock: 0, stock_alert_days: 30, is_active: true, remark: '' })
 const form = reactive(defaultForm())
@@ -166,6 +166,7 @@ const productRisks = row => {
 }
 const isColumnVisible = key => visibleColumns.value.includes(key)
 const isEditing = (row, field) => inlineEdit.productId === row.id && inlineEdit.field === field
+const isCurrentInlineEdit = (session, productId, field) => inlineEdit.session === session && inlineEdit.productId === productId && inlineEdit.field === field
 const productPayload = product => ({ code: product.code || null, name: product.name, category_id: product.category_id ?? null, spec: product.spec || null, unit: product.unit || '件', retail_price: number(product.retail_price), wholesale_price: number(product.wholesale_price), vip_price: number(product.vip_price), purchase_price: number(product.purchase_price), safe_stock: Math.max(0, Math.round(number(product.safe_stock))), stock_alert_days: Math.max(7, Math.round(number(product.stock_alert_days) || 30)), is_active: Boolean(product.is_active), remark: product.remark || null })
 
 const setPreferenceMessage = message => { preferenceMessage.value = message; window.setTimeout(() => { if (preferenceMessage.value === message) preferenceMessage.value = '' }, 2600) }
@@ -216,21 +217,33 @@ const handleSave = async () => {
 }
 const startInlineEdit = (row, field) => {
   if (!['remark', 'safe_stock'].includes(field)) return ElMessage.info('进价和售价请通过正式编辑保存，避免误操作。')
+  inlineEdit.session += 1
   inlineEdit.productId = row.id
   inlineEdit.field = field
   inlineEdit.original = row[field] ?? (field === 'safe_stock' ? 0 : '')
   inlineEdit.value = inlineEdit.original
 }
-const cancelInlineEdit = () => Object.assign(inlineEdit, { productId: null, field: '', value: null, original: null })
+const cancelInlineEdit = () => {
+  inlineEdit.session += 1
+  Object.assign(inlineEdit, { productId: null, field: '', value: null, original: null })
+}
 const confirmInlineEdit = async () => {
   const row = products.value.find(product => product.id === inlineEdit.productId)
   if (!row || !['remark', 'safe_stock'].includes(inlineEdit.field)) return cancelInlineEdit()
+  const editSession = inlineEdit.session
   const field = inlineEdit.field
   const nextValue = field === 'safe_stock' ? Math.max(0, Math.round(number(inlineEdit.value))) : String(inlineEdit.value || '').trim()
   if (row[field] === nextValue) return cancelInlineEdit()
   const previous = row[field]
   row[field] = nextValue
-  try { await updateProduct(row.id, productPayload(row)); ElMessage.success(field === 'safe_stock' ? '安全库存已更新' : '备注已更新') } catch { row[field] = previous } finally { cancelInlineEdit() }
+  try {
+    await updateProduct(row.id, productPayload(row))
+    ElMessage.success(field === 'safe_stock' ? '安全库存已更新' : '备注已更新')
+  } catch {
+    if (isCurrentInlineEdit(editSession, row.id, field)) row[field] = previous
+  } finally {
+    if (isCurrentInlineEdit(editSession, row.id, field)) cancelInlineEdit()
+  }
 }
 const handleDelete = async row => {
   try { await ElMessageBox.confirm(`确定停用商品“${row.name}”吗？有库存的商品不能停用。`, '确认停用', { type: 'warning', confirmButtonText: '确认停用', cancelButtonText: '取消' }); await deleteProduct(row.id); ElMessage.success('商品已停用'); loadData() } catch { /* cancelled or request failed */ }
