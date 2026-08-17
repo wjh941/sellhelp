@@ -109,7 +109,7 @@ async function loadStockData() {
   errorMessage.value = ''
   try {
     const [summary, stock, warnings, alerts, categoryData, categoryList, productData] = await Promise.all([
-      getStockSummary(), getAllStock({}), getExpiryWarnings({ warning_days: 30 }), getLowStockAlerts(), getCategoriesStock(), getCategories(), getProducts({ page_size: 1000, is_active: true }),
+      getStockSummary(), getAllStock({}), getExpiryWarnings({ warning_days: 30 }), getLowStockAlerts(), getCategoriesStock(), getCategories(), getProducts({ page_size: 100, is_active: true }),
     ])
     stockSummary.value = summary || {}
     allStock.value = Array.isArray(stock) ? stock : []

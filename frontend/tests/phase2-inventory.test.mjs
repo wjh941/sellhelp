@@ -35,3 +35,31 @@ test('inventory views expose batch risks, return limits, and stocktake variance 
   assert.match(analysis, /chart-empty/)
   assert.match(analysis, /onBeforeUnmount/)
 })
+
+test('inventory keeps supported product paging, return-partner traceability, and finite stocktake quantities', async () => {
+  const [stock, returns] = await Promise.all([readView('Stock.vue'), readView('Returns.vue')])
+
+  assert.match(stock, /getProducts\(\{ page_size: 100, is_active: true \}\)/)
+  assert.doesNotMatch(stock, /page_size: 1000/)
+
+  assert.match(returns, /getCustomers/)
+  assert.match(returns, /getSuppliers/)
+  assert.match(returns, /partner_id: null/)
+  assert.match(returns, /客户退货需要选择客户/)
+  assert.match(returns, /供应商退货需要选择供应商/)
+  assert.match(returns, /createReturn\(returnForm\)/)
+
+  const predicateSource = returns.match(/function isFiniteNonNegative\(value\) \{[\s\S]*?\n\}/)?.[0]
+  assert.ok(predicateSource, 'Returns.vue must define a finite stocktake-quantity predicate')
+  const isFiniteNonNegative = Function(`${predicateSource}; return isFiniteNonNegative`)()
+  for (const value of [null, undefined, '', '   ', NaN, Infinity, -Infinity, -1]) {
+    assert.equal(isFiniteNonNegative(value), false, `expected ${String(value)} to be rejected`)
+  }
+  assert.equal(isFiniteNonNegative(0), true)
+  assert.equal(isFiniteNonNegative('2.5'), true)
+
+  assert.match(returns, /const stockTakeQuantityError\s*=\s*row\s*=>/)
+  assert.match(returns, /v-if="stockTakeQuantityError\(row\)"/)
+  assert.match(returns, /if \(hasStockTakeErrors\.value\)/)
+  assert.match(returns, /actual_quantity: Number\(item\.actual_quantity\)/)
+})
