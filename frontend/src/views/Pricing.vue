@@ -80,17 +80,16 @@
       </section>
 
       <section class="page-card confirmation-panel">
-        <div class="section-heading"><div><h3>人工确认参考</h3><p>确认仅标记本次定价参考，不会修改商品真实售价。</p></div></div>
-        <el-form inline class="confirm-form">
-          <el-form-item label="确认人"><el-input v-model="confirmOperator" placeholder="例如：老板" /></el-form-item>
-          <el-form-item><el-button type="primary" size="large" :disabled="!pricingReferenceId" :loading="confirming" @click="confirmReference">确认本次参考</el-button></el-form-item>
-        </el-form>
-        <p v-if="!pricingReferenceId" class="form-hint">正在匹配本次分析产生的参考记录；未匹配时不会执行确认。</p>
+        <div class="section-heading"><div><h3>人工确认参考</h3><p>确认仅标记已有定价参考，不会修改商品真实售价。</p></div></div>
+        <el-alert type="info" :closable="false" show-icon>
+          本次分析接口未返回可确认记录。需要确认时，请在下方历史定价参考中选择具有记录编号的待确认项。
+        </el-alert>
       </section>
     </template>
 
     <section class="page-card">
       <div class="section-heading"><div><h3>历史定价参考</h3><p>已确认记录只代表人工确认过参考，不代表商品价格已经变化。</p></div></div>
+      <el-form inline class="confirm-form"><el-form-item label="确认人"><el-input v-model="confirmOperator" placeholder="例如：老板" /></el-form-item></el-form>
       <el-alert v-if="historyError" type="error" :title="historyError" show-icon :closable="false" class="request-error" />
       <div class="table-scroll">
         <el-table :data="pricingHistory" stripe v-loading="historyLoading" empty-text="暂无定价参考记录">
@@ -100,6 +99,7 @@
           <el-table-column prop="vip_price" label="VIP参考" width="110"><template #default="{ row }">{{ formatMoney(row.vip_price) }}</template></el-table-column>
           <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="row.confirmed ? 'success' : 'info'" size="small">{{ row.confirmed ? '已人工确认' : '待确认' }}</el-tag></template></el-table-column>
           <el-table-column label="分析时间" min-width="165"><template #default="{ row }">{{ formatDate(row.created_at || row.reference_date) }}</template></el-table-column>
+          <el-table-column label="操作" width="112" fixed="right"><template #default="{ row }"><el-button v-if="row.id && !row.confirmed" type="primary" link :loading="confirming === row.id" @click="confirmHistoryReference(row)">确认参考</el-button><span v-else>-</span></template></el-table-column>
         </el-table>
       </div>
     </section>
@@ -117,8 +117,7 @@ const pricingHistory = ref([])
 const selectedProduct = ref(null)
 const analyzing = ref(false)
 const historyLoading = ref(false)
-const confirming = ref(false)
-const pricingReferenceId = ref(null)
+const confirming = ref(null)
 const confirmOperator = ref('admin')
 const requestError = ref('')
 const historyError = ref('')
@@ -154,28 +153,23 @@ const analyzePricing = async () => {
   if (!selectedProduct.value) return ElMessage.warning('请先选择商品。')
   analyzing.value = true
   requestError.value = ''
-  pricingReferenceId.value = null
   try {
-    // Capture existing ids so confirmation can only target the reference created by this analysis.
-    const existingReferenceIds = new Set(pricingHistory.value.filter(item => item.product_id === selectedProduct.value).map(item => item.id))
     pricingResult.value = await calculatePricing(selectedProduct.value)
     simulationPrices.wholesale = Number(pricingResult.value.normal_price || 0)
     simulationPrices.vip = Number(pricingResult.value.vip_price || 0)
-    const latestProductHistory = await getPricingHistory({ product_id: selectedProduct.value })
-    pricingReferenceId.value = latestProductHistory.find(item => !existingReferenceIds.has(item.id))?.id || null
-    pricingHistory.value = [...latestProductHistory, ...pricingHistory.value.filter(item => item.product_id !== selectedProduct.value)]
+    await loadHistory(selectedProduct.value)
     ElMessage.success('定价参考已生成。')
   } catch { requestError.value = '定价参考生成失败，请稍后重试。' } finally { analyzing.value = false }
 }
-const confirmReference = async () => {
-  if (!pricingReferenceId.value) return ElMessage.warning('未找到可确认的定价参考记录。')
+const confirmHistoryReference = async row => {
+  if (!row?.id || row.confirmed) return
   try {
-    await ElMessageBox.confirm('确认后仅标记本次定价参考，不会修改商品售价。', '确认定价参考', { type: 'warning' })
-    confirming.value = true
-    await confirmPricing(pricingReferenceId.value, confirmOperator.value || 'admin')
+    await ElMessageBox.confirm('确认后仅标记该历史定价参考，不会修改商品售价。', '确认定价参考', { type: 'warning' })
+    confirming.value = row.id
+    await confirmPricing(row.id, confirmOperator.value || 'admin')
     ElMessage.success('定价参考已人工确认，商品售价未修改。')
-    await loadHistory(selectedProduct.value)
-  } catch { /* Cancelled or Axios interceptor already reported the error. */ } finally { confirming.value = false }
+    await loadHistory()
+  } catch { /* Cancelled or Axios interceptor already reported the error. */ } finally { confirming.value = null }
 }
 
 onMounted(async () => { await Promise.all([loadProducts(), loadHistory()]) })

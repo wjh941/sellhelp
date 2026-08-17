@@ -82,7 +82,7 @@
       </section>
     </template>
 
-    <section v-if="historyReports.length" class="page-card">
+    <section v-if="historyReports.length" class="page-card screen-only">
       <div class="section-heading"><div><h3>历史周报</h3><p>打开历史周报不会重新生成数据。</p></div></div>
       <div class="table-scroll"><el-table :data="historyReports" stripe v-loading="historyLoading"><el-table-column prop="week_start" label="周开始" width="112" /><el-table-column prop="week_end" label="周结束" width="112" /><el-table-column label="销售额" width="118"><template #default="{ row }">{{ formatMoney(row.total_sales) }}</template></el-table-column><el-table-column label="利润" width="118"><template #default="{ row }">{{ formatMoney(row.total_profit) }}</template></el-table-column><el-table-column prop="order_count" label="订单数" width="90" /><el-table-column label="操作" width="100" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="viewReport(row)">查看</el-button></template></el-table-column></el-table></div>
     </section>
@@ -92,7 +92,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { generateReport as generateReportApi, getLatestReport, getReport, getReports } from '@/api'
+import { generateReport as generateReportApi, getLatestReport, getProducts, getReport, getReports } from '@/api'
 
 const report = ref(null)
 const historyReports = ref([])
@@ -104,6 +104,7 @@ const selectedWeek = ref('本周')
 const weekOptions = ['本周', '上周', '两周前']
 const selectedCategory = ref('')
 const productKeyword = ref('')
+const productCategories = ref(new Map())
 const collapsed = reactive({ hot: false, profit: false, slow: false, risk: false, suggestions: false, advice: false })
 
 const parseItems = value => {
@@ -117,7 +118,7 @@ const slowProducts = computed(() => parseItems(report.value?.slow_products))
 const overstockItems = computed(() => parseItems(report.value?.overstock_risk))
 const expiredWarnings = computed(() => parseItems(report.value?.expired_warning))
 const customerDebts = computed(() => parseItems(report.value?.customer_debts))
-const itemCategory = row => row.category_name || row.category || '未分类'
+const itemCategory = row => productCategories.value.get(String(row.product_id)) || ''
 const categories = computed(() => [...new Set([...hotProducts.value, ...profitableProducts.value, ...slowProducts.value].map(itemCategory))].filter(Boolean))
 const filterProducts = items => items.filter(row => (!selectedCategory.value || itemCategory(row) === selectedCategory.value) && (!productKeyword.value.trim() || String(row.product_name || '').includes(productKeyword.value.trim())))
 const filteredHotProducts = computed(() => filterProducts(hotProducts.value))
@@ -132,12 +133,15 @@ const riskItems = computed(() => [
 const formatMoney = value => `¥${(Number(value) || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatDate = value => value ? new Date(value).toLocaleString('zh-CN') : '-'
 const formatPercent = value => `${(Number(value) || 0).toFixed(1)}%`
-const categoryLabel = row => itemCategory(row)
+const categoryLabel = row => itemCategory(row) || '-'
 const marginTagType = value => Number(value) >= 20 ? 'success' : Number(value) >= 10 ? 'warning' : 'danger'
 const riskTagType = type => type === '临期' ? 'warning' : type === '欠款' ? 'danger' : 'info'
 const barWidth = (value, items) => { const max = Math.max(...items.map(row => Number(row.total_amount) || 0), 1); return `${Math.max(8, Number(value || 0) / max * 100)}%` }
 const clearFilters = () => { selectedCategory.value = ''; productKeyword.value = '' }
-const selectRowCategory = row => { selectedCategory.value = itemCategory(row) }
+const selectRowCategory = row => {
+  const category = itemCategory(row)
+  if (category) selectedCategory.value = category
+}
 const toggleSection = section => { collapsed[section] = !collapsed[section] }
 
 const loadLatest = async () => {
@@ -148,6 +152,16 @@ const loadLatest = async () => {
 const loadHistory = async () => {
   historyLoading.value = true
   try { historyReports.value = await getReports({ limit: 20 }) } catch { requestError.value = '历史周报加载失败，请稍后重试。' } finally { historyLoading.value = false }
+}
+const loadReportProducts = async () => {
+  try {
+    const data = await getProducts({ page_size: 100 })
+    productCategories.value = new Map((data.items || [])
+      .filter(product => product.category_name)
+      .map(product => [String(product.id), product.category_name]))
+  } catch {
+    productCategories.value = new Map()
+  }
 }
 const generateReport = async () => {
   generating.value = true
@@ -173,7 +187,7 @@ const exportReport = () => {
     ['本周销售额', report.value.total_sales], ['本周利润', report.value.total_profit], ['订单数', report.value.order_count], ['库存总值', report.value.stock_value],
     [], ['热销商品', '销售额', '销量'], ...filteredHotProducts.value.map(row => [row.product_name, row.total_amount, row.total_qty]),
   ]
-  const csv = `\uFEFF${rows.map(row => row.map(cell => `"${String(cell ?? '').replaceAll('"', '""')}"`).join(',')).join('\n')}`
+  const csv = `\uFEFF${rows.map(row => row.map(serializeCsvCell).join(',')).join('\n')}`
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
   const link = document.createElement('a')
   link.href = url
@@ -181,13 +195,20 @@ const exportReport = () => {
   link.click()
   URL.revokeObjectURL(url)
 }
+const serializeCsvCell = value => {
+  const escaped = String(value ?? '').replaceAll('"', '""')
+  const leadingWhitespace = escaped.match(/^\s*/)?.[0] || ''
+  const content = escaped.slice(leadingWhitespace.length)
+  const guarded = /^[=+\-@]/.test(content) ? `${leadingWhitespace}'${content}` : escaped
+  return `"${guarded}"`
+}
 const printReport = () => window.print()
 
-onMounted(async () => { await Promise.all([loadLatest(), loadHistory()]) })
+onMounted(async () => { await Promise.all([loadLatest(), loadHistory(), loadReportProducts()]) })
 </script>
 
 <style scoped>
 .reports-page { display: grid; gap: 20px; }.page-subtitle, .section-heading p { color: var(--color-muted); font-size: 14px; margin-top: 6px; }.toolbar-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; }.toolbar-actions :deep(.el-select) { width: 126px; }.toolbar-actions :deep(.el-input__wrapper), .toolbar-actions :deep(.el-select__wrapper) { min-height: 42px; }.loading-state, .empty-state { min-height: 300px; }.report-cover { align-items: flex-start; background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface)); border: 1px solid var(--color-border); border-radius: 8px; display: flex; justify-content: space-between; margin-bottom: 16px; padding: 22px; }.report-kicker { color: var(--color-primary); font-size: 14px; font-weight: 600; }.report-cover h1 { font-size: 22px; margin: 8px 0; }.report-cover p { color: var(--color-muted); font-size: 14px; }.stat-grid { display: grid; gap: 14px; grid-template-columns: repeat(4, minmax(0, 1fr)); }.stat-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; min-height: 116px; padding: 18px; }.stat-card span { color: var(--color-muted); font-size: 14px; }.stat-card strong { display: block; font-size: 25px; margin-top: 15px; }.stat-card.sales { background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface)); }.stat-card.profit { background: color-mix(in srgb, var(--color-success) 6%, var(--color-surface)); }.stat-card.orders { background: color-mix(in srgb, var(--color-warning) 7%, var(--color-surface)); }.stat-card.stock { background: color-mix(in srgb, #7B61FF 6%, var(--color-surface)); }.section-heading { align-items: flex-start; display: flex; justify-content: space-between; margin-bottom: 16px; }.section-heading h3 { font-size: 17px; }.report-filters { display: flex; flex-wrap: wrap; gap: 10px; }.report-filters :deep(.el-select), .report-filters :deep(.el-input) { width: 210px; }.report-filters :deep(.el-input__wrapper), .report-filters :deep(.el-select__wrapper) { min-height: 42px; }.category-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }.report-two-column { display: grid; gap: 20px; grid-template-columns: repeat(2, minmax(0, 1fr)); }.report-section { margin: 0; }.table-scroll { overflow-x: auto; }.table-scroll :deep(.el-table) { min-width: 560px; }.mini-bars { display: grid; gap: 10px; margin-bottom: 16px; }.mini-bar { align-items: center; background: transparent; border: 0; color: var(--color-text); cursor: pointer; display: grid; font: inherit; gap: 10px; grid-template-columns: minmax(100px, 1fr) minmax(100px, 1.8fr) auto; padding: 4px 0; text-align: left; width: 100%; }.mini-bar:hover span { color: var(--color-primary); }.mini-bar i { background: var(--el-fill-color); border-radius: 3px; height: 10px; overflow: hidden; }.mini-bar b { background: var(--color-primary); border-radius: inherit; display: block; height: 100%; }.mini-bar strong { font-size: 14px; }.profit-text { color: var(--color-success); font-weight: 600; }.risk-text { color: var(--color-danger); font-weight: 600; }.advice-text { line-height: 1.85; min-height: 90px; white-space: pre-wrap; }
 @media (max-width: 980px) { .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.report-two-column { grid-template-columns: 1fr; } }.report-cover { gap: 12px; }.toolbar-actions { justify-content: flex-start; }
-@media print { .report-toolbar, .report-filter-panel, .toolbar-actions, .page-card:not(.report-section) + .page-card { display: none !important; }.reports-page { display: block; }.report-print-area, .report-section { break-inside: avoid; }.report-cover, .stat-card, .page-card { box-shadow: none; }.report-two-column { display: grid; grid-template-columns: 1fr 1fr; } }
+@media print { .report-toolbar, .report-filter-panel, .toolbar-actions, .screen-only { display: none !important; }.reports-page { display: block; }.report-print-area, .report-section { break-inside: avoid; }.report-cover, .stat-card, .page-card { box-shadow: none; }.report-two-column { display: grid; grid-template-columns: 1fr 1fr; } }
 </style>
