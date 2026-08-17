@@ -105,6 +105,8 @@ const weekOptions = ['本周', '上周', '两周前']
 const selectedCategory = ref('')
 const productKeyword = ref('')
 const productCategories = ref(new Map())
+const productPageSize = 100
+const maxProductPages = 100
 const collapsed = reactive({ hot: false, profit: false, slow: false, risk: false, suggestions: false, advice: false })
 
 const parseItems = value => {
@@ -155,8 +157,21 @@ const loadHistory = async () => {
 }
 const loadReportProducts = async () => {
   try {
-    const data = await getProducts({ page_size: 100 })
-    productCategories.value = new Map((data.items || [])
+    const loadedProducts = []
+    let page = 1
+    let total = Infinity
+
+    while (page <= maxProductPages) {
+      const data = await getProducts({ page, page_size: productPageSize })
+      const items = data.items || []
+      loadedProducts.push(...items)
+      if (Number.isFinite(Number(data.total))) total = Number(data.total)
+      if (!items.length) break
+      if (loadedProducts.length >= total) break
+      page += 1
+    }
+
+    productCategories.value = new Map(loadedProducts
       .filter(product => product.category_name)
       .map(product => [String(product.id), product.category_name]))
   } catch {
