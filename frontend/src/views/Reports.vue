@@ -40,6 +40,7 @@
           <el-input v-model="productKeyword" clearable placeholder="按商品名称筛选" />
           <el-button text type="primary" @click="clearFilters">清空筛选</el-button>
         </div>
+        <el-alert v-if="categoryMapWarning" type="warning" :title="categoryMapWarning" show-icon :closable="false" class="category-map-warning" />
         <div v-if="categories.length" class="category-chips"><el-button v-for="category in categories" :key="category" :type="selectedCategory === category ? 'primary' : 'default'" size="small" @click="selectedCategory = selectedCategory === category ? '' : category">{{ category }}</el-button></div>
       </section>
 
@@ -105,6 +106,7 @@ const weekOptions = ['本周', '上周', '两周前']
 const selectedCategory = ref('')
 const productKeyword = ref('')
 const productCategories = ref(new Map())
+const categoryMapWarning = ref('')
 const productPageSize = 100
 const maxProductPages = 100
 const collapsed = reactive({ hot: false, profit: false, slow: false, risk: false, suggestions: false, advice: false })
@@ -156,6 +158,7 @@ const loadHistory = async () => {
   try { historyReports.value = await getReports({ limit: 20 }) } catch { requestError.value = '历史周报加载失败，请稍后重试。' } finally { historyLoading.value = false }
 }
 const loadReportProducts = async () => {
+  categoryMapWarning.value = ''
   try {
     const loadedProducts = []
     let page = 1
@@ -174,6 +177,9 @@ const loadReportProducts = async () => {
     productCategories.value = new Map(loadedProducts
       .filter(product => product.category_name)
       .map(product => [String(product.id), product.category_name]))
+    if (page > maxProductPages && loadedProducts.length < total) {
+      categoryMapWarning.value = '商品分类映射达到加载上限，品类筛选可能不完整；当前周报数据不受影响。'
+    }
   } catch {
     productCategories.value = new Map()
   }
