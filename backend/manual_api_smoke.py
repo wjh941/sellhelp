@@ -7,6 +7,9 @@ from datetime import date, datetime, timedelta
 
 BASE = 'http://localhost:9000/api'
 
+print('WARNING: this manual smoke script creates and changes data.')
+print('Run it only against a disposable local database, never production or an operator database.')
+
 def api_get(url):
     resp = urllib.request.urlopen(f'{BASE}{url}')
     return json.loads(resp.read())

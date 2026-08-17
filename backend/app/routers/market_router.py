@@ -16,6 +16,15 @@ from ..services.pricing_service import PricingService
 
 router = APIRouter(prefix="/api", tags=["行情与定价"])
 
+
+def _commit_or_rollback(db: Session) -> None:
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+
 # ========== 市场行情 ==========
 
 @router.get("/market-prices", response_model=List[MarketPriceResponse])
@@ -64,7 +73,7 @@ def create_market_price(data: MarketPriceCreate, db: Session = Depends(get_db)):
         operator=data.operator
     )
     db.add(record)
-    db.commit()
+    _commit_or_rollback(db)
     db.refresh(record)
 
     result = MarketPriceResponse.model_validate(record)
@@ -83,7 +92,7 @@ def update_market_price(record_id: int, data: MarketPriceCreate, db: Session = D
 
     for key, value in data.model_dump().items():
         setattr(record, key, value)
-    db.commit()
+    _commit_or_rollback(db)
     db.refresh(record)
 
     result = MarketPriceResponse.model_validate(record)
@@ -100,7 +109,7 @@ def delete_market_price(record_id: int, db: Session = Depends(get_db)):
     if not record:
         raise HTTPException(status_code=404, detail="记录不存在")
     db.delete(record)
-    db.commit()
+    _commit_or_rollback(db)
     return MessageResponse(message="删除成功")
 
 

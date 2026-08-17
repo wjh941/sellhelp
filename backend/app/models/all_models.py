@@ -2,7 +2,7 @@
 盈泰副食贸易管理系统 - 完整数据库模型
 涵盖9大模块：基础档案、批次入库、销售出库、退货盘点、行情、AI定价、周报、商学院
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, Date, Boolean, Text, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, Float, DateTime, Date, Boolean, Text, ForeignKey, Index, Table, event
 from sqlalchemy.orm import relationship
 from datetime import datetime, date as date_type
 import sys
@@ -12,6 +12,14 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import Base
+
+
+user_roles = Table(
+    "user_roles",
+    Base.metadata,
+    Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+    Column("role_id", Integer, ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+)
 
 # ========== 模块1：基础档案管理 ==========
 
@@ -487,3 +495,55 @@ class SystemConfig(Base):
     value = Column(Text, comment="配置值")
     description = Column(String(500))
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+# ========== Identity and audit ==========
+
+class Role(Base):
+    __tablename__ = "roles"
+
+    id = Column(Integer, primary_key=True)
+    code = Column(String(50), unique=True, nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+    users = relationship("User", secondary=user_roles, back_populates="roles")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    username = Column(String(100), unique=True, nullable=False, index=True)
+    display_name = Column(String(100), nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    auth_version = Column(Integer, default=1, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    roles = relationship("Role", secondary=user_roles, back_populates="users", lazy="selectin")
+    audit_logs = relationship("AuditLog", back_populates="user")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True)
+    timestamp = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    client_ip = Column(String(64), nullable=True)
+    operation_type = Column(String(100), nullable=False, index=True)
+    operation_detail = Column(Text, nullable=False)
+    status_code = Column(Integer, nullable=False)
+
+    user = relationship("User", back_populates="audit_logs")
+
+
+def _reject_audit_log_mutation(*_args, **_kwargs):
+    raise ValueError("Audit logs are immutable")
+
+
+event.listen(AuditLog, "before_update", _reject_audit_log_mutation)
+event.listen(AuditLog, "before_delete", _reject_audit_log_mutation)

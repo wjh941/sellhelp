@@ -70,7 +70,11 @@ class PricingService:
             }, ensure_ascii=False)
         )
         self.db.add(reference)
-        self.db.flush()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
 
         return {
             "product_id": product_id,
@@ -337,4 +341,9 @@ class PricingService:
         ref.confirmed = True
         ref.confirmed_by = operator
         ref.confirmed_at = datetime.now()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         return True

@@ -34,6 +34,7 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+MIGRATION_MANAGED_TABLES = {"roles", "users", "user_roles", "audit_logs"}
 
 
 def get_db():
@@ -47,7 +48,12 @@ def get_db():
 
 def init_db():
     """初始化数据库表"""
-    Base.metadata.create_all(bind=engine)
+    # Keep the legacy Phase 1 bootstrap while reserving identity/audit DDL for Alembic.
+    legacy_tables = [
+        table for table in Base.metadata.sorted_tables
+        if table.name not in MIGRATION_MANAGED_TABLES
+    ]
+    Base.metadata.create_all(bind=engine, tables=legacy_tables)
     if engine.dialect.name != "sqlite":
         return
     with engine.begin() as connection:

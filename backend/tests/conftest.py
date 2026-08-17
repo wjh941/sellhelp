@@ -38,10 +38,12 @@ def db_session():
             pass
 
     app.dependency_overrides[get_db] = override_get_db
+    app.state.auth_session_factory = lambda: db
     try:
         yield db
     finally:
         app.dependency_overrides.clear()
+        delattr(app.state, "auth_session_factory")
         db.close()
         Base.metadata.drop_all(bind=engine)
         engine.dispose()

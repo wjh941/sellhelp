@@ -6,11 +6,10 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.database import SessionLocal, engine, init_db
-from app.models.all_models import Base, Category, Supplier, Customer
+from app.database import SessionLocal, init_db
+from app.models.all_models import Category, Supplier, Customer
 
 # 创建数据库表
-Base.metadata.create_all(bind=engine)
 
 db = SessionLocal()
 
@@ -90,6 +89,7 @@ def init_default_customers():
 
 
 def main():
+    init_db()
     print("=" * 50)
     print("盈泰副食贸易管理系统 - 数据初始化")
     print("=" * 50)

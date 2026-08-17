@@ -11,6 +11,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import init_db
+from app.security import PermissionMiddleware
 from app.services.market_sync_scheduler import market_sync_scheduler
 
 # 导入所有路由
@@ -27,6 +28,7 @@ from app.routers.report_router import router as report_router
 from app.routers.export_router import router as export_router
 from app.routers.finance_router import router as finance_router
 from app.routers.system_router import router as system_router
+from app.routers.auth_router import audit_router, router as auth_router
 
 app = FastAPI(
     title="盈泰副食贸易管理系统",
@@ -53,6 +55,7 @@ def shutdown_market_sync_scheduler():
     market_sync_scheduler.shutdown()
 
 # CORS配置 - 允许前端访问
+app.add_middleware(PermissionMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -75,6 +78,8 @@ app.include_router(report_router)
 app.include_router(export_router)
 app.include_router(finance_router)
 app.include_router(system_router)
+app.include_router(auth_router)
+app.include_router(audit_router)
 
 
 @app.get("/api/health")

@@ -515,3 +515,60 @@ class ExpiryWarning(BaseModel):
 class MessageResponse(BaseModel):
     message: str
     data: Optional[Any] = None
+
+
+# ========== Authentication and audit ==========
+class LoginRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=100)
+    password: str = Field(..., min_length=1, max_length=256)
+
+
+class UserCreateRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.-]+$")
+    display_name: str = Field(..., min_length=1, max_length=100)
+    password: str = Field(..., min_length=8, max_length=256)
+    role_codes: List[str] = Field(..., min_length=1)
+
+
+class UserUpdateRequest(BaseModel):
+    display_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    password: Optional[str] = Field(None, min_length=8, max_length=256)
+    role_codes: Optional[List[str]] = Field(None, min_length=1)
+    is_active: Optional[bool] = None
+
+
+class AuthUserResponse(BaseModel):
+    id: Optional[int]
+    username: str
+    display_name: str
+    role_codes: List[str]
+    standalone_mode: bool
+
+
+class LoginResponse(AuthUserResponse):
+    access_token: Optional[str] = None
+    token_type: str = "bearer"
+
+
+class RoleResponse(BaseModel):
+    code: str
+    name: str
+    description: Optional[str] = None
+
+
+class AuditLogResponse(BaseModel):
+    id: int
+    user_id: Optional[int] = None
+    username: Optional[str] = None
+    timestamp: datetime
+    client_ip: Optional[str] = None
+    operation_type: str
+    operation_detail: str
+    status_code: int
+
+
+class AuditLogPageResponse(BaseModel):
+    items: List[AuditLogResponse]
+    total: int
+    page: int
+    page_size: int

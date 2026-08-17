@@ -6,14 +6,46 @@ const api = axios.create({
   timeout: 30000
 })
 
+const AUTH_TOKEN_KEY = 'sellhelp.auth.token'
+let unauthorizedHandler = null
+
+const tokenStorage = () => (typeof window === 'undefined' ? null : window.localStorage)
+export const getAuthToken = () => tokenStorage()?.getItem(AUTH_TOKEN_KEY) || null
+export const setAuthToken = (token) => {
+  const storage = tokenStorage()
+  if (!storage) return
+  if (token) storage.setItem(AUTH_TOKEN_KEY, token)
+  else storage.removeItem(AUTH_TOKEN_KEY)
+}
+export const setUnauthorizedHandler = (handler) => { unauthorizedHandler = handler }
+
+api.interceptors.request.use(config => {
+  const token = getAuthToken()
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
 api.interceptors.response.use(
   response => response.data,
   error => {
+    if (error.response?.status === 401 && !error.config?.skipAuthRedirect) {
+      unauthorizedHandler?.()
+    }
     const message = error.response?.data?.detail || error.message || '请求失败'
-    ElMessage.error(message)
+    if (!error.config?.skipErrorMessage) ElMessage.error(message)
     return Promise.reject(error)
   }
 )
+
+// ========== Authentication and access control ==========
+export const login = (data) => api.post('/auth/login', data, { skipAuthRedirect: true })
+export const logout = () => api.post('/auth/logout', null, { skipAuthRedirect: true })
+export const getCurrentUser = () => api.get('/auth/me', { skipAuthRedirect: true, skipErrorMessage: true })
+export const getRoles = () => api.get('/auth/roles')
+export const getUsers = () => api.get('/auth/users')
+export const createUser = (data) => api.post('/auth/users', data)
+export const updateUser = (id, data) => api.put(`/auth/users/${id}`, data)
+export const getAuditLogs = (params) => api.get('/audit-logs', { params })
 
 // ========== 商品管理 ==========
 export const getCategories = () => api.get('/categories')

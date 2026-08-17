@@ -91,3 +91,5 @@ npm.cmd run build
 ## Backup and recovery
 
 Database backups created by the application are stored under `backend/backup`. The system also creates a pre-restore backup there before a database restore.
+
+Before running Alembic against a file-based SQLite database, stop the backend and copy the database file to a safe location. See `backend/ALEMBIC.md` for the non-destructive migration procedure.

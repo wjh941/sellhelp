@@ -185,9 +185,10 @@ textarea {
 .page-card {
   background: var(--color-surface);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(29, 33, 41, 0.06);
+  box-shadow: 0 6px 18px rgba(29, 33, 41, 0.08);
   margin-bottom: 20px;
   padding: 20px;
+  transition: box-shadow 180ms ease, transform 180ms ease;
 }
 
 .page-header {
@@ -261,6 +262,36 @@ textarea {
 
 .el-button--primary {
   min-height: 42px;
+}
+
+.el-button:not(.is-disabled):not(.is-loading):active {
+  transform: translateY(1px);
+}
+
+.el-table {
+  --el-table-header-bg-color: var(--color-page);
+  --el-table-tr-bg-color: var(--color-surface);
+  --el-table-row-hover-bg-color: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface));
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.el-table th.el-table__cell {
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  box-shadow: 0 0 0 1px var(--color-border) inset;
+}
+
+.el-input__wrapper:hover,
+.el-select__wrapper:hover,
+.el-textarea__inner:hover {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 55%, var(--color-border)) inset;
 }
 
 .el-button,
