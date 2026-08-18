@@ -31,9 +31,20 @@ async function signIn(page, username) {
   expect(identity.status, identity.body).toBe(200)
 }
 
+async function signOut(page) {
+  await page.locator('.user-avatar').click()
+  await page.getByRole('menuitem', { name: '退出登录' }).click()
+  await expect(page).toHaveURL(/\/login$/)
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 async function chooseOption(page, dialog, index, optionName) {
   await dialog.locator('.el-select').nth(index).click()
-  await page.getByRole('option', { name: optionName, exact: true }).click()
+  const primaryLabel = escapeRegExp(optionName)
+  await page.getByRole('option', { name: new RegExp(`^${primaryLabel}(?=\\s|$|当前库存)`) }).click()
 }
 
 test.describe.serial('critical inventory workflow', () => {
@@ -73,14 +84,15 @@ test.describe.serial('critical inventory workflow', () => {
     await chooseOption(page, purchaseDialog, 0, 'E2E 供应商')
     await chooseOption(page, purchaseDialog, 1, 'E2E 测试商品')
     const purchaseLine = purchaseDialog.locator('.purchase-line')
-    await purchaseLine.locator('.el-input__inner').fill('E2E-BATCH-001')
-    await purchaseLine.locator('.el-input-number input').nth(0).fill('12')
-    await purchaseLine.locator('.el-input-number input').nth(1).fill('10')
+    await purchaseLine.getByRole('textbox', { name: '批次号' }).fill('E2E-BATCH-001')
+    await purchaseLine.getByRole('spinbutton', { name: '入库数量' }).fill('12')
+    await purchaseLine.getByRole('spinbutton', { name: '入库单价' }).fill('10')
     await purchaseDialog.getByRole('button', { name: '确认入库' }).click()
     await page.getByRole('button', { name: '确认提交' }).click()
     await expect(purchaseDialog).toBeHidden()
-    await expect(page.getByText('E2E-BATCH-001', { exact: true })).toBeVisible()
+    await expect(page.getByRole('row', { name: /E2E 供应商/ })).toBeVisible()
 
+    await signOut(page)
     await signIn(page, 'e2e-sales')
     await page.goto('/sales')
     await page.getByRole('button', { name: '新建销售单' }).click()
@@ -93,6 +105,7 @@ test.describe.serial('critical inventory workflow', () => {
     saleOrderNo = (await page.locator('.business-table .el-table__body tbody tr').first().locator('td').first().innerText()).trim()
     expect(saleOrderNo).toMatch(/^SO/)
 
+    await signOut(page)
     await signIn(page, 'e2e-warehouse')
     await page.goto('/returns')
     await page.getByRole('button', { name: '客户退货' }).click()
@@ -112,6 +125,7 @@ test.describe.serial('critical inventory workflow', () => {
     await page.getByRole('button', { name: '确认提交' }).click()
     await expect(stockTakeDialog).toBeHidden()
 
+    await signOut(page)
     await signIn(page, 'e2e-owner')
     await page.goto('/stock')
     await expect(page.getByRole('button', { name: '导出' })).toBeVisible()
@@ -159,6 +173,7 @@ test.describe.serial('critical inventory workflow', () => {
     await page.goto('/stock')
     await expect(page.getByRole('button', { name: '导出' })).toHaveCount(0)
 
+    await signOut(page)
     await signIn(page, 'e2e-sales')
     await expect(page.getByText('库存查询', { exact: true })).toHaveCount(0)
     await page.goto('/stock')
