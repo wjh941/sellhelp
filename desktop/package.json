@@ -1,0 +1,14 @@
+{
+  "name": "sellhelp-desktop",
+  "version": "1.0.0",
+  "description": "SellHelp local Windows desktop shell",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/runtime.test.cjs"
+  },
+  "devDependencies": {
+    "electron": "43.2.0"
+  }
+}
