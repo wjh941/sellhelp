@@ -4,14 +4,18 @@
 import os
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.staticfiles import StaticFiles
 
 # 确保项目根目录在路径中
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import init_db
+from app.desktop_runtime import desktop_static_dir, is_desktop_mode
 from app.security import PermissionMiddleware
 from app.services.market_sync_scheduler import market_sync_scheduler
 
@@ -50,79 +54,96 @@ def shutdown_market_sync_scheduler():
     market_sync_scheduler.shutdown()
 
 
-app = FastAPI(
-    title="盈泰副食贸易管理系统",
-    description="专为东莞高埗新联综合市场盈泰副食贸易部定制的完整商业经营管理系统",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    lifespan=lifespan,
-)
-
-allowed_origins = [origin.strip() for origin in os.getenv(
-    "SELLHELP_ALLOWED_ORIGINS", "http://localhost:8080"
-).split(",") if origin.strip()]
+class SpaStaticFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            return await super().get_response("index.html", scope)
 
 
-# CORS配置 - 允许前端访问
-app.add_middleware(PermissionMiddleware)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def create_app(static_dir: Path | None = None) -> FastAPI:
+    desktop_mode = is_desktop_mode()
+    resolved_static_dir = static_dir if static_dir is not None else desktop_static_dir()
+    app = FastAPI(
+        title="盈泰副食贸易管理系统",
+        description="专为东莞高埗新联综合市场盈泰副食贸易部定制的完整商业经营管理系统",
+        version="1.0.0",
+        docs_url=None if desktop_mode else "/docs",
+        redoc_url=None if desktop_mode else "/redoc",
+        lifespan=lifespan,
+    )
+    allowed_origins = [origin.strip() for origin in os.getenv(
+        "SELLHELP_ALLOWED_ORIGINS", "http://localhost:8080"
+    ).split(",") if origin.strip()]
 
-# 注册路由
-app.include_router(product_router)
-app.include_router(supplier_router)
-app.include_router(customer_router)
-app.include_router(purchase_router)
-app.include_router(sales_router)
-app.include_router(inventory_router)
-app.include_router(return_router)
-app.include_router(market_router)
-app.include_router(external_market_router)
-app.include_router(report_router)
-app.include_router(export_router)
-app.include_router(finance_router)
-app.include_router(system_router)
-app.include_router(auth_router)
-app.include_router(audit_router)
+    # CORS配置 - 允许前端访问
+    app.add_middleware(PermissionMiddleware)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # 注册路由
+    app.include_router(product_router)
+    app.include_router(supplier_router)
+    app.include_router(customer_router)
+    app.include_router(purchase_router)
+    app.include_router(sales_router)
+    app.include_router(inventory_router)
+    app.include_router(return_router)
+    app.include_router(market_router)
+    app.include_router(external_market_router)
+    app.include_router(report_router)
+    app.include_router(export_router)
+    app.include_router(finance_router)
+    app.include_router(system_router)
+    app.include_router(auth_router)
+    app.include_router(audit_router)
+
+    @app.get("/api/health")
+    def health_check():
+        """健康检查"""
+        return {
+            "status": "ok",
+            "system": "盈泰副食贸易管理系统",
+            "version": "1.0.0",
+            "database": "SQLite",
+            "note": "本地单机版，数据存储在 yingtai.db"
+        }
+
+    if resolved_static_dir is None:
+        @app.get("/")
+        def root():
+            """根路径"""
+            return {
+                "name": "盈泰副食贸易管理系统",
+                "description": "记账 + 控库存 + 会定价 + 懂行情 + 每周自动分析生意 + 商业经营思维教学",
+                "modules": [
+                    "基础档案管理",
+                    "批次入库系统",
+                    "销售开单+FIFO出库",
+                    "退货盘点管控",
+                    "市场行情记录",
+                    "AI智能定价",
+                    "每周经营分析报告",
+                    "AI生意顾问"
+                ],
+                "docs": "/docs",
+                "status": "运行中"
+            }
+
+    if resolved_static_dir is not None:
+        app.mount("/", SpaStaticFiles(directory=resolved_static_dir), name="static")
+    return app
 
 
-@app.get("/api/health")
-def health_check():
-    """健康检查"""
-    return {
-        "status": "ok",
-        "system": "盈泰副食贸易管理系统",
-        "version": "1.0.0",
-        "database": "SQLite",
-        "note": "本地单机版，数据存储在 yingtai.db"
-    }
-
-
-@app.get("/")
-def root():
-    """根路径"""
-    return {
-        "name": "盈泰副食贸易管理系统",
-        "description": "记账 + 控库存 + 会定价 + 懂行情 + 每周自动分析生意 + 商业经营思维教学",
-        "modules": [
-            "基础档案管理",
-            "批次入库系统",
-            "销售开单+FIFO出库",
-            "退货盘点管控",
-            "市场行情记录",
-            "AI智能定价",
-            "每周经营分析报告",
-            "AI生意顾问"
-        ],
-        "docs": "/docs",
-        "status": "运行中"
-    }
+app = create_app()
 
 
 if __name__ == "__main__":

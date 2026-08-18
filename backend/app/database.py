@@ -2,14 +2,23 @@
 盈泰副食贸易管理系统 - 数据库配置
 本地单机版 SQLite 数据库
 """
+import os
+from pathlib import Path
+
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import make_url
-from sqlalchemy.orm import sessionmaker, declarative_base
-import os
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-# 数据库文件路径（项目根目录下）
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "yingtai.db")
-SQLALCHEMY_DATABASE_URL = os.getenv("SELLHELP_DATABASE_URL", f"sqlite:///{DB_PATH}")
+from app.desktop_runtime import desktop_data_dir, is_desktop_mode
+
+def sqlite_database_path() -> Path:
+    if is_desktop_mode():
+        return desktop_data_dir() / "data" / "sellhelp.db"
+    return Path(__file__).resolve().parent.parent / "yingtai.db"
+
+
+DB_PATH = str(sqlite_database_path())
+SQLALCHEMY_DATABASE_URL = os.getenv("SELLHELP_DATABASE_URL", f"sqlite:///{sqlite_database_path().as_posix()}")
 
 
 def get_active_sqlite_db_path() -> str:
