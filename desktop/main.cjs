@@ -3,6 +3,7 @@ const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { createBackendLifecycle } = require('./backend-lifecycle.cjs')
 const { createQuitCoordinator } = require('./lifecycle.cjs')
 const { backendCommand, findLoopbackPort, waitForHealth } = require('./runtime.cjs')
 
@@ -109,14 +110,6 @@ async function stopBackend() {
   }
 }
 
-const quitCoordinator = createQuitCoordinator({
-  stopBackend,
-  quit: () => app.quit(),
-  onStopError: (error) => {
-    appendDesktopLog(desktopDataDirectory(), `[backend stop failure] ${error.message}`)
-  },
-})
-
 function waitForHealthyChild(child, healthUrl) {
   return new Promise((resolve, reject) => {
     const onError = (error) => reject(error)
@@ -187,6 +180,15 @@ async function startBackend() {
   }
 }
 
+const backendLifecycle = createBackendLifecycle({ startBackend, stopBackend })
+const quitCoordinator = createQuitCoordinator({
+  stopBackend: () => backendLifecycle.shutdown(),
+  quit: () => app.quit(),
+  onStopError: (error) => {
+    appendDesktopLog(desktopDataDirectory(), `[backend stop failure] ${error.message}`)
+  },
+})
+
 function isCurrentLocalUrl(navigationUrl) {
   try {
     const parsed = new URL(navigationUrl)
@@ -233,7 +235,10 @@ async function loadLocalInterface(window, port) {
 }
 
 async function createMainWindow() {
-  const port = await startBackend()
+  const port = await backendLifecycle.start()
+  if (port === false || shuttingDown) {
+    return
+  }
   const window = new BrowserWindow({
     show: false,
     icon: path.join(__dirname, 'resources', 'icon.ico'),
@@ -292,13 +297,12 @@ async function restartBackend(event) {
 
   restartPromise = (async () => {
     try {
-      await stopBackend()
-      const port = await startBackend()
-      if (!mainWindow || mainWindow.isDestroyed()) {
+      const port = await backendLifecycle.restart()
+      if (port === false || shuttingDown || !mainWindow || mainWindow.isDestroyed()) {
         return false
       }
       await loadLocalInterface(mainWindow, port)
-      return true
+      return !shuttingDown
     } catch (error) {
       reportStartupFailure(error)
       return false

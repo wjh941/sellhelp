@@ -10,8 +10,13 @@ function createQuitCoordinator({ stopBackend, quit, onStopError = () => {} }) {
       return shutdownPromise
     }
 
-    shutdownPromise = Promise.resolve()
-      .then(() => stopBackend())
+    let stopPromise
+    try {
+      stopPromise = Promise.resolve(stopBackend())
+    } catch (error) {
+      stopPromise = Promise.reject(error)
+    }
+    shutdownPromise = stopPromise
       .catch((error) => {
         try {
           onStopError(error)
