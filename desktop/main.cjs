@@ -3,6 +3,7 @@ const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { createQuitCoordinator } = require('./lifecycle.cjs')
 const { backendCommand, findLoopbackPort, waitForHealth } = require('./runtime.cjs')
 
 const BACKEND_HEALTH_TIMEOUT_MS = 30_000
@@ -107,6 +108,14 @@ async function stopBackend() {
     await waitForBackendExit(child)
   }
 }
+
+const quitCoordinator = createQuitCoordinator({
+  stopBackend,
+  quit: () => app.quit(),
+  onStopError: (error) => {
+    appendDesktopLog(desktopDataDirectory(), `[backend stop failure] ${error.message}`)
+  },
+})
 
 function waitForHealthyChild(child, healthUrl) {
   return new Promise((resolve, reject) => {
@@ -304,17 +313,8 @@ async function restartBackend(event) {
 }
 
 async function shutdown() {
-  if (shuttingDown) {
-    return
-  }
   shuttingDown = true
-  try {
-    await stopBackend()
-  } catch (error) {
-    appendDesktopLog(desktopDataDirectory(), `[backend stop failure] ${error.message}`)
-  } finally {
-    app.quit()
-  }
+  return quitCoordinator.requestQuit()
 }
 
 ipcMain.handle('sellhelp:restart-backend', restartBackend)
@@ -334,8 +334,9 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => {
     void shutdown()
   })
-  app.on('before-quit', () => {
-    void stopBackend()
+  app.on('before-quit', (event) => {
+    shuttingDown = true
+    void quitCoordinator.beforeQuit(event)
   })
   app.whenReady().then(
     () => ensureMainWindow(),
