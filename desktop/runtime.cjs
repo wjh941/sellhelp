@@ -20,6 +20,22 @@ function findLoopbackPort() {
   })
 }
 
+function resolveDesktopDataDirectory({
+  developmentDataDirectory,
+  isPackaged,
+  localAppData,
+}) {
+  if (!isPackaged && developmentDataDirectory) {
+    return developmentDataDirectory
+  }
+  if (typeof localAppData !== 'string' || localAppData.trim().length === 0) {
+    throw new Error('LOCALAPPDATA must be set to run SellHelp on Windows')
+  }
+
+  const join = localAppData.includes('\\') ? path.win32.join : path.posix.join
+  return join(localAppData, 'SellHelp')
+}
+
 function backendCommand(resourcesPath, dataDir, port) {
   if (typeof resourcesPath !== 'string' || resourcesPath.length === 0) {
     throw new TypeError('resourcesPath must be a non-empty string')
@@ -111,5 +127,6 @@ async function waitForHealth(healthUrl, timeoutMs) {
 module.exports = {
   backendCommand,
   findLoopbackPort,
+  resolveDesktopDataDirectory,
   waitForHealth,
 }

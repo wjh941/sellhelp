@@ -5,7 +5,12 @@ const path = require('node:path')
 
 const { createBackendLifecycle } = require('./backend-lifecycle.cjs')
 const { createQuitCoordinator } = require('./lifecycle.cjs')
-const { backendCommand, findLoopbackPort, waitForHealth } = require('./runtime.cjs')
+const {
+  backendCommand,
+  findLoopbackPort,
+  resolveDesktopDataDirectory,
+  waitForHealth,
+} = require('./runtime.cjs')
 
 const BACKEND_HEALTH_TIMEOUT_MS = 30_000
 let backendChild = null
@@ -18,10 +23,11 @@ let windowCreationPromise = null
 
 function desktopDataDirectory() {
   const override = process.env.SELLHELP_DESKTOP_DATA_DIR
-  if (!app.isPackaged && override) {
-    return path.resolve(override)
-  }
-  return path.join(app.getPath('localAppData'), 'SellHelp')
+  return resolveDesktopDataDirectory({
+    developmentDataDirectory: !app.isPackaged && override ? path.resolve(override) : undefined,
+    isPackaged: app.isPackaged,
+    localAppData: process.env.LOCALAPPDATA,
+  })
 }
 
 function bundledResourcesDirectory() {
@@ -279,11 +285,20 @@ async function ensureMainWindow() {
 }
 
 function reportStartupFailure(error) {
-  const dataDirectory = desktopDataDirectory()
-  appendDesktopLog(dataDirectory, `[startup failure] ${error.stack || error.message}`)
+  let logPath = null
+  try {
+    const dataDirectory = desktopDataDirectory()
+    logPath = path.join(dataDirectory, 'logs', 'desktop-shell.log')
+    appendDesktopLog(dataDirectory, `[startup failure] ${error.stack || error.message}`)
+  } catch {
+    // A missing LOCALAPPDATA value must not hide the original startup error.
+  }
+  const details = error?.message === 'LOCALAPPDATA must be set to run SellHelp on Windows'
+    ? error.message
+    : 'The local service did not become available.'
   dialog.showErrorBox(
     'SellHelp could not start',
-    `The local service did not become available. See ${path.join(dataDirectory, 'logs', 'desktop-shell.log')}.`,
+    logPath ? `${details} See ${logPath}.` : details,
   )
 }
 

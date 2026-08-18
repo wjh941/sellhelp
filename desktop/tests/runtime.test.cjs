@@ -1,7 +1,44 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
 
-const { backendCommand, waitForHealth } = require('../runtime.cjs')
+const {
+  backendCommand,
+  resolveDesktopDataDirectory,
+  waitForHealth,
+} = require('../runtime.cjs')
+
+test('desktop data directory uses Windows LOCALAPPDATA and only permits development overrides', () => {
+  assert.equal(
+    resolveDesktopDataDirectory({
+      isPackaged: true,
+      localAppData: 'C:/Users/a/AppData/Local',
+    }),
+    'C:/Users/a/AppData/Local/SellHelp',
+  )
+  assert.equal(
+    resolveDesktopDataDirectory({
+      developmentDataDirectory: 'C:/temporary/SellHelp',
+      isPackaged: false,
+      localAppData: 'C:/Users/a/AppData/Local',
+    }),
+    'C:/temporary/SellHelp',
+  )
+  assert.equal(
+    resolveDesktopDataDirectory({
+      developmentDataDirectory: 'C:/temporary/SellHelp',
+      isPackaged: true,
+      localAppData: 'C:/Users/a/AppData/Local',
+    }),
+    'C:/Users/a/AppData/Local/SellHelp',
+  )
+})
+
+test('desktop data directory rejects a missing Windows LOCALAPPDATA value', () => {
+  assert.throws(
+    () => resolveDesktopDataDirectory({ isPackaged: true }),
+    /LOCALAPPDATA must be set/,
+  )
+})
 
 test('backend command targets the packaged executable and loopback arguments', () => {
   const result = backendCommand(
