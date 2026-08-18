@@ -13,11 +13,13 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-if config.config_file_name is not None:
+if config.config_file_name is not None and not config.attributes.get("skip_logging_config"):
     fileConfig(config.config_file_name)
 
-database_url = context.get_x_argument(as_dictionary=True).get(
-    "database_url", SQLALCHEMY_DATABASE_URL
+database_url = (
+    context.get_x_argument(as_dictionary=True).get("database_url")
+    or config.attributes.get("database_url")
+    or SQLALCHEMY_DATABASE_URL
 )
 config.set_main_option("sqlalchemy.url", database_url)
 target_metadata = Base.metadata
