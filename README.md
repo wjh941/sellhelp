@@ -1,5 +1,17 @@
 # Sellhelp
 
+## Windows Desktop Installer
+
+Windows 10/11 x64 users can build an unsigned NSIS installer with
+`powershell -ExecutionPolicy Bypass -File scripts\build-desktop.ps1`.
+The result is `desktop\release\SellHelp Setup 1.0.0.exe`. The installed
+application starts its bundled backend locally and does not require Python,
+Node.js, or network access after installation. Because the installer is not
+code-signed yet, Windows may show a publisher warning.
+
+Uninstall keeps application data, backups, logs, and the desktop login secret
+under `%LOCALAPPDATA%\SellHelp`.
+
 盈泰副食贸易部经营管理系统。该项目使用 FastAPI、SQLite、Vue 3、Vite 和 Element Plus，为副食档口的入库、销售、库存风险、客户欠款和经营复盘提供本地化管理界面。
 
 ## 已完成的前端功能

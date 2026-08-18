@@ -2,13 +2,61 @@
   "name": "sellhelp-desktop",
   "version": "1.0.0",
   "description": "SellHelp local Windows desktop shell",
+  "author": "SellHelp",
   "private": true,
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "test": "node --test tests/runtime.test.cjs tests/lifecycle.test.cjs tests/backend-lifecycle.test.cjs"
+    "test": "node --test tests/runtime.test.cjs tests/lifecycle.test.cjs tests/backend-lifecycle.test.cjs tests/build-contract.test.cjs",
+    "dist": "electron-builder --win nsis --x64"
   },
   "devDependencies": {
-    "electron": "43.2.0"
+    "electron": "43.2.0",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "com.sellhelp.desktop",
+    "productName": "SellHelp",
+    "artifactName": "${productName} Setup ${version}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "asar": true,
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "runtime.cjs",
+      "backend-lifecycle.cjs",
+      "lifecycle.cjs",
+      "resources/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend/dist/SellHelpBackend",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../frontend/dist",
+        "to": "frontend",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "resources/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    }
   }
 }

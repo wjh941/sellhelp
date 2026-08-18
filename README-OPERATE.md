@@ -1,5 +1,15 @@
 # SellHelp 运维说明
 
+## Windows 桌面安装包
+
+目标系统为 Windows 10/11 x64。发布构建使用
+`powershell -ExecutionPolicy Bypass -File scripts\build-desktop.ps1`，生成
+`desktop\release\SellHelp Setup 1.0.0.exe`。当前安装包未签名，Windows 可能显示
+发布者警告；安装完成后的运行不依赖 Python、Node.js 或网络连接。
+
+卸载程序不会删除 `%LOCALAPPDATA%\SellHelp`，其中保留 SQLite 数据、备份、日志和
+桌面 JWT 密钥。要完全清除本地数据，必须在卸载后由管理员显式删除该目录。
+
 ## 部署启动
 
 后端：进入 `backend` 后执行 `python -m uvicorn app.main:app --host 0.0.0.0 --port 8001`。
