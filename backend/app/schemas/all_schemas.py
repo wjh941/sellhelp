@@ -17,7 +17,7 @@ ReturnType = Literal["\u5ba2\u6237\u9000\u8d27", "\u4f9b\u5e94\u5546\u9000\u8d27
 
 # ========== 商品分类 ==========
 class CategoryBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=50, comment="分类名称")
+    name: str = Field(..., min_length=1, max_length=50, json_schema_extra={"comment": "分类名称"})
     sort_order: int = 0
 
 class CategoryCreate(CategoryBase):
@@ -30,8 +30,7 @@ class CategoryResponse(CategoryBase):
     id: int
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ========== 商品 ==========
@@ -65,8 +64,7 @@ class ProductResponse(ProductBase):
     current_stock: float = 0
     near_expiry_stock: float = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProductListResponse(BaseModel):
@@ -94,8 +92,7 @@ class SupplierResponse(SupplierBase):
     id: int
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ========== 客户 ==========
@@ -122,8 +119,7 @@ class CustomerResponse(CustomerBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ========== 入库单 ==========
@@ -154,8 +150,7 @@ class PurchaseItemResponse(BaseModel):
     amount: float
     remaining_quantity: float = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PurchaseOrderCreate(BaseModel):
@@ -178,8 +173,7 @@ class PurchaseOrderResponse(BaseModel):
     created_at: Optional[datetime] = None
     items: List[PurchaseItemResponse] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ========== 销售单 ==========
@@ -200,8 +194,7 @@ class SalesItemResponse(BaseModel):
     profit: float
     batches_used: Optional[List[dict]] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SalesOrderCreate(BaseModel):
@@ -255,8 +248,7 @@ class SalesOrderResponse(BaseModel):
     created_at: Optional[datetime] = None
     items: List[SalesItemResponse] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ========== 退货 ==========
@@ -287,8 +279,7 @@ class ReturnOrderResponse(BaseModel):
     operator: Optional[str] = None
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ========== 盘点 ==========
@@ -307,8 +298,7 @@ class StockTakeBatchResponse(BaseModel):
     actual_quantity: float
     diff_quantity: float
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class StockTakeResponse(BaseModel):
@@ -327,8 +317,7 @@ class StockTakeResponse(BaseModel):
     confirmed: bool
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ========== 行情 ==========
@@ -357,8 +346,7 @@ class MarketPriceResponse(BaseModel):
     operator: Optional[str] = None
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ========== 外部行情待确认账本 ==========
@@ -448,8 +436,7 @@ class PricingReferenceResponse(BaseModel):
     confirmed_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ========== 周报 ==========
@@ -473,8 +460,7 @@ class WeeklyReportResponse(BaseModel):
     ai_business_advice: Optional[str] = None
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ========== AI顾问 ==========

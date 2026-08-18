@@ -1,10 +1,12 @@
 """
 盈泰副食贸易管理系统 - FastAPI主入口
 """
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 import os
 import sys
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 # 确保项目根目录在路径中
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -29,29 +31,38 @@ from app.routers.finance_router import router as finance_router
 from app.routers.system_router import router as system_router
 from app.routers.auth_router import audit_router, router as auth_router
 
-app = FastAPI(
-    title="盈泰副食贸易管理系统",
-    description="专为东莞高埗新联综合市场盈泰副食贸易部定制的完整商业经营管理系统",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
-)
-
-allowed_origins = [origin.strip() for origin in os.getenv(
-    "SELLHELP_ALLOWED_ORIGINS", "http://localhost:8080"
-).split(",") if origin.strip()]
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    initialize_database()
+    try:
+        yield
+    finally:
+        shutdown_market_sync_scheduler()
 
 
-@app.on_event("startup")
 def initialize_database():
     init_db()
     if os.getenv("SELLHELP_DISABLE_MARKET_SYNC_SCHEDULER") != "1":
         market_sync_scheduler.start()
 
 
-@app.on_event("shutdown")
 def shutdown_market_sync_scheduler():
     market_sync_scheduler.shutdown()
+
+
+app = FastAPI(
+    title="盈泰副食贸易管理系统",
+    description="专为东莞高埗新联综合市场盈泰副食贸易部定制的完整商业经营管理系统",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
+
+allowed_origins = [origin.strip() for origin in os.getenv(
+    "SELLHELP_ALLOWED_ORIGINS", "http://localhost:8080"
+).split(",") if origin.strip()]
+
 
 # CORS配置 - 允许前端访问
 app.add_middleware(PermissionMiddleware)
