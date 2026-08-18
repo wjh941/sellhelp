@@ -21,6 +21,10 @@
           <el-select v-model="selectedCategory" clearable placeholder="全部分类"><el-option v-for="item in categoryOptions" :key="item" :label="item" :value="item" /></el-select>
           <el-input v-model="searchKeyword" clearable placeholder="搜索商品或批次" />
           <el-button type="primary" :loading="loading" @click="loadStockData">刷新</el-button>
+          <el-dropdown v-if="auth.hasRole('owner')" trigger="click" @command="downloadInventory">
+            <el-button :loading="downloading">导出<el-icon class="button-suffix"><ArrowDown /></el-icon></el-button>
+            <template #dropdown><el-dropdown-menu><el-dropdown-item command="xlsx">下载 XLSX</el-dropdown-item><el-dropdown-item command="pdf">下载 PDF</el-dropdown-item><el-dropdown-item command="csv">下载 CSV</el-dropdown-item></el-dropdown-menu></template>
+          </el-dropdown>
         </div>
       </div>
       <el-alert v-if="!loading && lowStockAlerts.length" type="warning" :closable="false" show-icon class="state-alert" title="存在低库存商品，请结合安全库存列安排补货。" />
@@ -44,10 +48,15 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import * as echarts from 'echarts'
-import { getAllStock, getCategories, getCategoriesStock, getExpiryWarnings, getLowStockAlerts, getProducts, getStockSummary } from '@/api'
+import { echarts } from '@/utils/charts'
+import { ArrowDown } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { exportStockReport, getAllStock, getCategories, getCategoriesStock, getExpiryWarnings, getLowStockAlerts, getProducts, getStockSummary } from '@/api'
+import { useAuth } from '@/stores/auth'
+import { downloadBlob } from '@/utils/download'
 
 const loading = ref(false)
+const downloading = ref(false)
 const errorMessage = ref('')
 const stockSummary = ref({})
 const allStock = ref([])
@@ -60,6 +69,7 @@ const selectedCategory = ref('')
 const searchKeyword = ref('')
 const categoryChartRef = ref(null)
 let categoryChart = null
+const auth = useAuth()
 
 const formatMoney = value => (Number(value) || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -126,6 +136,12 @@ async function loadStockData() {
   } finally {
     loading.value = false
   }
+}
+
+async function downloadInventory(format) {
+  if (!auth.hasRole('owner')) return
+  downloading.value = true
+  try { downloadBlob(await exportStockReport({ format }), `库存报表.${format}`); ElMessage.success(`${format.toUpperCase()} 文件已开始下载。`) } finally { downloading.value = false }
 }
 
 const onWindowResize = () => categoryChart?.resize()

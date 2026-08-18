@@ -210,7 +210,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import * as echarts from 'echarts'
+import { echarts } from '@/utils/charts'
 import {
   getDashboardMetrics,
   getDebtCustomers,

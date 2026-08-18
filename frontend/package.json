@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node --test tests/external-market-api.test.mjs tests/external-market-url.test.mjs tests/operation-ui.test.mjs tests/phase2-archives.test.mjs tests/phase2-inventory.test.mjs tests/phase2-market-reports.test.mjs",
+    "test": "node --test tests/external-market-api.test.mjs tests/external-market-url.test.mjs tests/operation-ui.test.mjs tests/phase2-archives.test.mjs tests/phase2-inventory.test.mjs tests/phase2-market-reports.test.mjs tests/phase3-exports.test.mjs tests/phase4-hardening.test.mjs",
+    "test:e2e": "playwright test",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -15,10 +16,10 @@
     "echarts": "^5.5.0",
     "element-plus": "^2.5.0",
     "vue": "^3.4.0",
-    "vue-echarts": "^6.7.0",
     "vue-router": "^4.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@vitejs/plugin-vue": "^5.0.0",
     "sass": "^1.70.0",
     "unplugin-vue-components": "^32.1.0",

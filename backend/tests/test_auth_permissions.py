@@ -1,4 +1,18 @@
+import pytest
+
 from app.models.all_models import Role, SystemConfig
+
+
+EXPORT_PATHS = (
+    "/api/export/sales/1",
+    "/api/export/purchase/1",
+    "/api/export/customer-statement/1",
+    "/api/export/stock-report",
+    "/api/export/expiry-report",
+    "/api/export/weekly-reports/1",
+    "/api/export/stock-takes",
+    "/api/export/sales-history",
+)
 
 
 def seed_builtin_roles(db):
@@ -83,6 +97,8 @@ def test_role_rules_protect_owner_actions_allow_assigned_workflow_and_revoke_log
 
     assert client.post("/api/products", json={"name": "Blocked", "unit": "box"}, headers=sales_headers).status_code == 403
     assert client.post("/api/system/backup", headers=warehouse_headers).status_code == 403
+    assert client.get("/api/export/sales-history", headers=sales_headers).status_code == 403
+    assert client.get("/api/export/stock-takes", headers=warehouse_headers).status_code == 403
     assert client.post("/api/products", json={"name": "Blocked", "unit": "box"}, headers=warehouse_headers).status_code == 403
     assert client.post("/api/purchase-orders", json={}, headers=warehouse_headers).status_code == 422
     assert client.post("/api/sales-orders", json={}, headers=sales_headers).status_code == 422
@@ -94,3 +110,17 @@ def test_role_rules_protect_owner_actions_allow_assigned_workflow_and_revoke_log
 
     assert client.post("/api/auth/logout", headers=sales_headers).status_code == 200
     assert client.get("/api/products", headers=sales_headers).status_code == 401
+
+
+@pytest.mark.parametrize("path", EXPORT_PATHS)
+def test_every_export_route_requires_owner_when_standalone_mode_is_disabled(client, db_session, monkeypatch, path):
+    """Changing an export route must not allow non-owner accounts to download business data."""
+    monkeypatch.setenv("SELLHELP_JWT_SECRET", "test-only-jwt-secret-must-be-32-chars")
+    seed_builtin_roles(db_session)
+    create_account(client, "owner", "owner")
+    create_account(client, "warehouse", "warehouse_operator")
+    create_account(client, "sales", "sales_clerk")
+    set_standalone_mode(db_session, False)
+
+    for headers in (login_headers(client, "warehouse"), login_headers(client, "sales")):
+        assert client.get(path, headers=headers).status_code == 403

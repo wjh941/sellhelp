@@ -9,8 +9,12 @@
         <div class="toolbar-actions">
           <el-select v-model="selectedWeek" aria-label="选择生成周期"><el-option v-for="week in weekOptions" :key="week" :label="week" :value="week" /></el-select>
           <el-button type="primary" size="large" :loading="generating" @click="generateReport"><el-icon><Refresh /></el-icon>{{ report ? '重新生成周报' : '生成周报' }}</el-button>
-          <el-button :disabled="!report" @click="exportReport"><el-icon><Download /></el-icon>导出数据</el-button>
-          <el-button type="warning" :disabled="!report" @click="printReport"><el-icon><Printer /></el-icon>打印 / 导出 PDF</el-button>
+          <el-dropdown v-if="auth.hasRole('owner')" trigger="click" @command="downloadReport">
+            <el-button :disabled="!report" :loading="downloading"><el-icon><Download /></el-icon>导出<el-icon class="button-suffix"><ArrowDown /></el-icon></el-button>
+            <template #dropdown><el-dropdown-menu><el-dropdown-item command="xlsx">下载 XLSX</el-dropdown-item><el-dropdown-item command="pdf">下载 PDF</el-dropdown-item><el-dropdown-item command="csv">下载 CSV</el-dropdown-item></el-dropdown-menu></template>
+          </el-dropdown>
+          <el-button v-if="auth.hasRole('owner')" :disabled="!report" @click="exportReport"><el-icon><Download /></el-icon>CSV 备用</el-button>
+          <el-button type="warning" :disabled="!report" @click="printReport"><el-icon><Printer /></el-icon>打印预览</el-button>
         </div>
       </div>
       <el-alert v-if="requestError" type="error" :title="requestError" show-icon :closable="false" />
@@ -93,15 +97,20 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { generateReport as generateReportApi, getLatestReport, getProducts, getReport, getReports } from '@/api'
+import { ArrowDown, Download, Printer, Refresh } from '@element-plus/icons-vue'
+import { downloadWeeklyReport, generateReport as generateReportApi, getLatestReport, getProducts, getReport, getReports } from '@/api'
+import { useAuth } from '@/stores/auth'
+import { downloadBlob } from '@/utils/download'
 
 const report = ref(null)
 const historyReports = ref([])
 const loading = ref(false)
 const historyLoading = ref(false)
 const generating = ref(false)
+const downloading = ref(false)
 const requestError = ref('')
 const selectedWeek = ref('本周')
+const auth = useAuth()
 const weekOptions = ['本周', '上周', '两周前']
 const selectedCategory = ref('')
 const productKeyword = ref('')
@@ -201,6 +210,15 @@ const viewReport = async row => {
   requestError.value = ''
   try { report.value = await getReport(row.id); clearFilters() } catch { requestError.value = '历史周报加载失败，请稍后重试。' } finally { loading.value = false }
 }
+const downloadReport = async format => {
+  if (!report.value || !auth.hasRole('owner')) return
+  downloading.value = true
+  try {
+    const file = await downloadWeeklyReport(report.value.id, format)
+    downloadBlob(file, `周度经营报表-${report.value.week_end || '未命名'}.${format}`)
+    ElMessage.success(`${format.toUpperCase()} 文件已开始下载。`)
+  } finally { downloading.value = false }
+}
 const exportReport = () => {
   if (!report.value) return
   const rows = [
@@ -208,13 +226,7 @@ const exportReport = () => {
     ['本周销售额', report.value.total_sales], ['本周利润', report.value.total_profit], ['订单数', report.value.order_count], ['库存总值', report.value.stock_value],
     [], ['热销商品', '销售额', '销量'], ...filteredHotProducts.value.map(row => [row.product_name, row.total_amount, row.total_qty]),
   ]
-  const csv = `\uFEFF${rows.map(row => row.map(serializeCsvCell).join(',')).join('\n')}`
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `周度经营报表-${report.value.week_end || '未命名'}.csv`
-  link.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(new Blob([`\uFEFF${rows.map(row => row.map(serializeCsvCell).join(',')).join('\n')}`], { type: 'text/csv;charset=utf-8' }), `周度经营报表-${report.value.week_end || '未命名'}.csv`)
 }
 const serializeCsvCell = value => {
   const escaped = String(value ?? '').replaceAll('"', '""')

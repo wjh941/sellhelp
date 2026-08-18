@@ -52,6 +52,12 @@ const routes = [
     meta: { title: '库存分析', icon: 'PieChart', roles: routeRoles.StockAnalysis }
   },
   {
+    path: '/stock-take-history',
+    name: 'StockTakeHistory',
+    component: () => import('@/views/StockTakeHistory.vue'),
+    meta: { title: '库存盘点历史', icon: 'DocumentChecked', roles: routeRoles.StockTakeHistory }
+  },
+  {
     path: '/returns',
     name: 'Returns',
     component: () => import('@/views/Returns.vue'),
@@ -62,6 +68,12 @@ const routes = [
     name: 'Finance',
     component: () => import('@/views/Finance.vue'),
     meta: { title: '回款管理', icon: 'Wallet', roles: routeRoles.Finance }
+  },
+  {
+    path: '/customer-sales-history',
+    name: 'CustomerSalesHistory',
+    component: () => import('@/views/CustomerSalesHistory.vue'),
+    meta: { title: '客户销售历史', icon: 'Tickets', roles: routeRoles.CustomerSalesHistory }
   },
   {
     path: '/market',
@@ -92,6 +104,12 @@ const routes = [
     name: 'Settings',
     component: () => import('@/views/Settings.vue'),
     meta: { title: '系统设置', icon: 'Setting', roles: routeRoles.Settings }
+  },
+  {
+    path: '/system-config',
+    name: 'SystemConfig',
+    component: () => import('@/views/SystemConfig.vue'),
+    meta: { title: '配置管理', icon: 'Setting', roles: routeRoles.SystemConfig }
   },
   {
     path: '/accounts',

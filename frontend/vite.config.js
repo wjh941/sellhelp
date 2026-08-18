@@ -2,11 +2,23 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || 'http://localhost:8001'
+
+const elementPlusIconNames = new Set([
+  'ArrowDown', 'Box', 'ChatDotRound', 'Check', 'Close', 'Delete', 'Document', 'DocumentChecked',
+  'Download', 'EditPen', 'Expand', 'Fold', 'FolderOpened', 'Goods', 'Histogram', 'Money', 'Moon',
+  'Odometer', 'OfficeBuilding', 'PieChart', 'Plus', 'Printer', 'Promotion', 'Rank', 'Refresh',
+  'RefreshLeft', 'Search', 'Setting', 'Shop', 'Sunny', 'SwitchButton', 'Tickets', 'TrendCharts',
+  'Upload', 'User', 'UserFilled', 'Wallet', 'WarningFilled',
+])
 
 const elementPlusIconResolver = (name) => {
-  if (name in ElementPlusIconsVue) return { name, from: '@element-plus/icons-vue' }
+  if (elementPlusIconNames.has(name)) return { name, from: '@element-plus/icons-vue' }
 }
 
 export default defineConfig({
@@ -26,9 +38,12 @@ export default defineConfig({
     port: 8080,
     strictPort: true,
     host: '0.0.0.0',
+    fs: {
+      allow: [path.resolve(__dirname)],
+    },
     proxy: {
       '/api': {
-        target: 'http://localhost:8001',
+        target: apiProxyTarget,
         changeOrigin: true
       }
     }

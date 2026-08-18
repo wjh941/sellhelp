@@ -9,16 +9,19 @@ const authState = reactive({
 })
 
 let initialization = null
+let identityVersion = 0
 
 export const routeRoles = {
   Dashboard: ['owner', 'warehouse_operator', 'sales_clerk'],
   Products: ['owner'],
   Suppliers: ['owner'],
   Customers: ['owner'],
+  CustomerSalesHistory: ['owner'],
   Purchase: ['owner', 'warehouse_operator'],
   Sales: ['owner', 'sales_clerk'],
   Stock: ['owner', 'warehouse_operator'],
   StockAnalysis: ['owner', 'warehouse_operator'],
+  StockTakeHistory: ['owner', 'warehouse_operator'],
   Returns: ['owner', 'warehouse_operator'],
   Finance: ['owner', 'sales_clerk'],
   Market: ['owner'],
@@ -26,11 +29,13 @@ export const routeRoles = {
   Reports: ['owner'],
   AIChat: ['owner'],
   Settings: ['owner'],
+  SystemConfig: ['owner'],
   Accounts: ['owner'],
   AuditLogs: ['owner'],
 }
 
 const applyIdentity = (identity, token = null) => {
+  identityVersion += 1
   setAuthToken(token)
   authState.user = identity
   authState.standalone_mode = Boolean(identity?.standalone_mode)
@@ -44,13 +49,14 @@ export const initializeAuthentication = async (force = false) => {
   if (initialization) return initialization
 
   authState.loading = true
+  const requestIdentityVersion = identityVersion
   initialization = getCurrentUser()
     .then(identity => {
       applyIdentity(identity)
       return true
     })
     .catch(() => {
-      clearAuthentication()
+      if (identityVersion === requestIdentityVersion) clearAuthentication()
       return false
     })
     .finally(() => {

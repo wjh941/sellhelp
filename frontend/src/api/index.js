@@ -134,11 +134,15 @@ export const getAISession = (sessionId) => api.get(`/ai-chat/sessions/${sessionI
 export const deleteAISession = (sessionId) => api.delete(`/ai-chat/sessions/${sessionId}`)
 
 // ========== 导出打印 ==========
-export const exportSalesOrder = (id, format = 'json') => api.get(`/export/sales/${id}`, { params: { format } })
-export const exportPurchaseOrder = (id, format = 'json') => api.get(`/export/purchase/${id}`, { params: { format } })
-export const exportCustomerStatement = (id, params) => api.get(`/export/customer-statement/${id}`, { params })
-export const exportStockReport = (params) => api.get('/export/stock-report', { params })
-export const exportExpiryReport = (params) => api.get('/export/expiry-report', { params })
+const download = (url, params) => api.get(url, { params, responseType: 'blob' })
+export const exportSalesOrder = (id, format = 'json') => format === 'json' || format === 'print' ? api.get(`/export/sales/${id}`, { params: { format } }) : download(`/export/sales/${id}`, { format })
+export const exportPurchaseOrder = (id, format = 'json') => format === 'json' || format === 'print' ? api.get(`/export/purchase/${id}`, { params: { format } }) : download(`/export/purchase/${id}`, { format })
+export const exportCustomerStatement = (id, params = {}) => params.format ? download(`/export/customer-statement/${id}`, params) : api.get(`/export/customer-statement/${id}`, { params })
+export const exportStockReport = (params = {}) => params.format ? download('/export/stock-report', params) : api.get('/export/stock-report', { params })
+export const exportExpiryReport = (params = {}) => params.format ? download('/export/expiry-report', params) : api.get('/export/expiry-report', { params })
+export const downloadWeeklyReport = (id, format) => download(`/export/weekly-reports/${id}`, { format })
+export const downloadStockTakeHistory = (params) => download('/export/stock-takes', params)
+export const downloadSalesHistory = (params) => download('/export/sales-history', params)
 
 // ========== 财务管理 ==========
 export const getDebtCustomers = (params) => api.get('/finance/debt-customers', { params })

@@ -30,7 +30,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import * as echarts from 'echarts'
+import { echarts } from '@/utils/charts'
 import { ElMessage } from 'element-plus'
 import { getClearSuggestion as getClearSuggestionApi, getOverstockAnalysis, getSlowProducts } from '@/api'
 

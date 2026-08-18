@@ -21,7 +21,7 @@
             <template #title>工作台</template>
           </el-menu-item>
 
-          <el-sub-menu v-if="hasAnyAccess(['Products', 'Suppliers', 'Customers'])" index="archive">
+          <el-sub-menu v-if="hasAnyAccess(['Products', 'Suppliers', 'Customers', 'CustomerSalesHistory'])" index="archive">
             <template #title>
               <el-icon><FolderOpened /></el-icon>
               <span>基础档案</span>
@@ -29,6 +29,7 @@
             <el-menu-item v-if="canAccessRoute('Products')" index="/products"><el-icon><Goods /></el-icon><template #title>商品管理</template></el-menu-item>
             <el-menu-item v-if="canAccessRoute('Suppliers')" index="/suppliers"><el-icon><OfficeBuilding /></el-icon><template #title>供应商管理</template></el-menu-item>
             <el-menu-item v-if="canAccessRoute('Customers')" index="/customers"><el-icon><User /></el-icon><template #title>客户管理</template></el-menu-item>
+            <el-menu-item v-if="canAccessRoute('CustomerSalesHistory')" index="/customer-sales-history"><el-icon><Tickets /></el-icon><template #title>客户销售历史</template></el-menu-item>
           </el-sub-menu>
 
           <el-menu-item v-if="canAccessRoute('Purchase')" index="/purchase">
@@ -45,7 +46,7 @@
             <el-menu-item v-if="canAccessRoute('Finance')" index="/finance"><el-icon><Wallet /></el-icon><template #title>回款管理</template></el-menu-item>
           </el-sub-menu>
 
-          <el-sub-menu v-if="hasAnyAccess(['Returns', 'Stock', 'StockAnalysis'])" index="stock">
+          <el-sub-menu v-if="hasAnyAccess(['Returns', 'Stock', 'StockAnalysis', 'StockTakeHistory'])" index="stock">
             <template #title>
               <el-icon><Box /></el-icon>
               <span>退货盘点</span>
@@ -53,6 +54,7 @@
             <el-menu-item v-if="canAccessRoute('Returns')" index="/returns"><el-icon><RefreshLeft /></el-icon><template #title>退货管理</template></el-menu-item>
             <el-menu-item v-if="canAccessRoute('Stock')" index="/stock"><el-icon><Histogram /></el-icon><template #title>库存查询</template></el-menu-item>
             <el-menu-item v-if="canAccessRoute('StockAnalysis')" index="/stock-analysis"><el-icon><PieChart /></el-icon><template #title>库存分析</template></el-menu-item>
+            <el-menu-item v-if="canAccessRoute('StockTakeHistory')" index="/stock-take-history"><el-icon><DocumentChecked /></el-icon><template #title>库存盘点历史</template></el-menu-item>
           </el-sub-menu>
 
           <el-sub-menu v-if="hasAnyAccess(['Market', 'Pricing'])" index="market">
@@ -72,12 +74,13 @@
             <el-icon><ChatDotRound /></el-icon>
             <template #title>生意顾问</template>
           </el-menu-item>
-          <el-sub-menu v-if="hasAnyAccess(['Settings', 'Accounts', 'AuditLogs'])" index="administration">
+          <el-sub-menu v-if="hasAnyAccess(['Settings', 'SystemConfig', 'Accounts', 'AuditLogs'])" index="administration">
             <template #title>
               <el-icon><Setting /></el-icon>
               <span>系统管理</span>
             </template>
             <el-menu-item v-if="canAccessRoute('Settings')" index="/settings"><el-icon><Setting /></el-icon><template #title>系统设置</template></el-menu-item>
+            <el-menu-item v-if="canAccessRoute('SystemConfig')" index="/system-config"><el-icon><Setting /></el-icon><template #title>配置管理</template></el-menu-item>
             <el-menu-item v-if="canAccessRoute('Accounts')" index="/accounts"><el-icon><UserFilled /></el-icon><template #title>账户管理</template></el-menu-item>
             <el-menu-item v-if="canAccessRoute('AuditLogs')" index="/audit-logs"><el-icon><DocumentChecked /></el-icon><template #title>审计日志</template></el-menu-item>
           </el-sub-menu>
