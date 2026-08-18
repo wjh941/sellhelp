@@ -25,7 +25,7 @@ function Invoke-DesktopBuild {
 
     Push-Location $repositoryRoot
     try {
-        Invoke-Checked { python -m pip install -r backend\requirements.txt -r backend\requirements-build.txt } 'Installing Python build dependencies'
+        Invoke-Checked { python -m pip install --no-deps -r backend\requirements-build.txt } 'Installing Python build dependencies'
         Invoke-Checked { npm.cmd --prefix frontend ci } 'Installing frontend dependencies'
         Invoke-Checked { npm.cmd --prefix frontend run build } 'Building frontend assets'
 

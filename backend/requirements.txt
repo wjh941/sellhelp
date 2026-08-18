@@ -1,4 +1,4 @@
-# 盈泰副食贸易管理系统 - 后端依赖
+# SellHelp production backend dependencies.
 fastapi==0.141.1
 uvicorn==0.52.1
 sqlalchemy==2.0.51

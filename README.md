@@ -28,7 +28,7 @@ under `%LOCALAPPDATA%\SellHelp`.
 ## 环境要求
 
 - Python 3.11
-- Node.js 18 或更高版本
+- Node.js 22.12.0 或更高版本
 
 ## 全新克隆后的初始化
 
