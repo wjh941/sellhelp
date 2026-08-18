@@ -2,8 +2,11 @@ import { build, preview } from 'vite'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import config from '../../vite.config.js'
+import { readE2ePort } from './runtime.mjs'
 
 const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const backendPort = readE2ePort(process.env.SELLHELP_E2E_BACKEND_PORT, 8005, 'SELLHELP_E2E_BACKEND_PORT')
+const frontendPort = readE2ePort(process.env.SELLHELP_E2E_FRONTEND_PORT, 5187, 'SELLHELP_E2E_FRONTEND_PORT')
 await build({
   ...config,
   configFile: false,
@@ -25,11 +28,11 @@ const server = await preview({
   },
   preview: {
     host: '127.0.0.1',
-    port: 5187,
+    port: frontendPort,
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8005',
+        target: `http://127.0.0.1:${backendPort}`,
         changeOrigin: true,
       },
     },
