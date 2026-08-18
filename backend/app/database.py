@@ -3,6 +3,7 @@
 本地单机版 SQLite 数据库
 """
 import os
+import sqlite3
 from pathlib import Path
 
 from sqlalchemy import create_engine, inspect
@@ -34,6 +35,15 @@ def get_active_sqlite_db_path() -> str:
     ):
         raise ValueError("Backup and restore require a file-based SQLite database")
     return os.path.abspath(database)
+
+
+def active_backup_directory() -> Path:
+    return Path(get_active_sqlite_db_path()).parent / "backups"
+
+
+def sqlite_backup(source: Path, target: Path) -> None:
+    with sqlite3.connect(source) as source_connection, sqlite3.connect(target) as target_connection:
+        source_connection.backup(target_connection)
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,

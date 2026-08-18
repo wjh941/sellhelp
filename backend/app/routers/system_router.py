@@ -8,11 +8,10 @@ from sqlalchemy import func
 from typing import List, Optional
 from datetime import datetime, date, timedelta
 import os
-import shutil
 import json
 import re
 
-from ..database import get_active_sqlite_db_path, get_db, DB_PATH
+from ..database import active_backup_directory, engine, get_active_sqlite_db_path, get_db, sqlite_backup
 from ..models.all_models import Product, ProductBatch, SalesOrder, SalesOrderItem, SystemConfig, WeeklyReport
 
 router = APIRouter(prefix="/api/system", tags=["系统管理"])
@@ -20,14 +19,17 @@ router = APIRouter(prefix="/api/system", tags=["系统管理"])
 _BACKUP_FILENAME = re.compile(r"(?:yingtai_backup|pre_restore)_\d{8}_\d{6}\.db")
 
 
-def _backup_directory() -> str:
-    return os.path.join(os.path.dirname(DB_PATH), "backup")
+def _backup_directory():
+    try:
+        return active_backup_directory()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-def _resolve_backup_file(filename: str) -> str:
+def _resolve_backup_file(filename: str):
     if os.path.basename(filename) != filename or not _BACKUP_FILENAME.fullmatch(filename):
         raise HTTPException(status_code=400, detail="Invalid backup filename")
-    return os.path.join(_backup_directory(), filename)
+    return _backup_directory() / filename
 
 
 def _active_database_path() -> str:
@@ -49,19 +51,19 @@ def backup_database(
         raise HTTPException(status_code=404, detail="数据库文件不存在")
 
     backup_dir = _backup_directory()
-    os.makedirs(backup_dir, exist_ok=True)
+    backup_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_filename = f"yingtai_backup_{timestamp}.db"
-    backup_path = os.path.join(backup_dir, backup_filename)
+    backup_path = backup_dir / backup_filename
 
-    shutil.copy2(database_path, backup_path)
+    sqlite_backup(database_path, backup_path)
 
     # 更新备份记录
     config = db.query(SystemConfig).filter(SystemConfig.key == "last_backup").first()
     backup_info = json.dumps({
         "filename": backup_filename,
-        "path": backup_path,
+        "path": str(backup_path),
         "timestamp": datetime.now().isoformat(),
         "size": os.path.getsize(backup_path)
     }, ensure_ascii=False)
@@ -80,7 +82,7 @@ def backup_database(
     return {
         "message": "备份成功",
         "backup_file": backup_filename,
-        "backup_path": backup_path,
+        "backup_path": str(backup_path),
         "file_size": os.path.getsize(backup_path),
         "timestamp": datetime.now().isoformat()
     }
@@ -132,15 +134,17 @@ def restore_database(
     pre_backup = None
     if os.path.exists(database_path):
         pre_backup = _resolve_backup_file(f"pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
-        shutil.copy2(database_path, pre_backup)
+        sqlite_backup(database_path, pre_backup)
 
     # 恢复
-    shutil.copy2(backup_path, database_path)
+    engine.dispose()
+    sqlite_backup(backup_path, database_path)
 
     return {
         "message": "数据库恢复成功，请重启系统",
         "backup_file": backup_file,
-        "pre_restore_backup": pre_backup
+        "pre_restore_backup": str(pre_backup) if pre_backup else None,
+        "restart_required": True,
     }
 
 

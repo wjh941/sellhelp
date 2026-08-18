@@ -1,11 +1,14 @@
 from datetime import datetime
 from pathlib import Path
+import sqlite3
 from urllib.parse import quote
 
 import pytest
+from sqlalchemy import create_engine
 
 from app import database
 from app.models.all_models import Customer, Product, SalesOrder, SalesOrderItem
+from app.routers import system_router
 
 
 COMPLETED = "\u5df2\u5b8c\u6210"
@@ -81,36 +84,55 @@ def test_backup_operations_reject_unsafe_filenames(client, method, path, filenam
     assert response.status_code == 400
 
 
-def test_backup_and_restore_use_configured_file_sqlite_database(client, monkeypatch, tmp_path):
+def test_backup_uses_active_database_parent_and_sqlite_backup_api(client, monkeypatch, tmp_path):
     database_path = tmp_path / "configured.db"
-    database_path.write_bytes(b"configured database")
+    connection = sqlite3.connect(database_path)
+    connection.execute("PRAGMA journal_mode=WAL")
+    connection.execute("CREATE TABLE recovery_check (value TEXT)")
+    connection.execute("INSERT INTO recovery_check VALUES ('backup value')")
+    connection.commit()
     monkeypatch.setattr(database, "SQLALCHEMY_DATABASE_URL", f"sqlite:///{database_path.as_posix()}")
 
-    system_info = client.get("/api/system/info")
     backup = client.post("/api/system/backup")
 
-    assert system_info.status_code == 200
-    assert system_info.json()["database"] == {
-        "path": str(database_path),
-        "size": len(b"configured database"),
-        "tables": {
-            "products": 0,
-            "customers": 0,
-            "suppliers": 0,
-            "sales_orders": 0,
-            "batch_records": 0,
-        },
-    }
-    assert backup.status_code == 200
-    backup_path = backup.json()["backup_path"]
-    assert Path(backup_path).read_bytes() == b"configured database"
+    try:
+        assert backup.status_code == 200
+        backup_path = Path(backup.json()["backup_path"])
+        assert backup_path.parent == database_path.parent / "backups"
+        with sqlite3.connect(backup_path) as backup_connection:
+            assert backup_connection.execute("SELECT value FROM recovery_check").fetchone() == ("backup value",)
+    finally:
+        connection.close()
 
-    database_path.write_bytes(b"changed database")
+
+def test_restore_disposes_connections_and_requires_desktop_restart(client, monkeypatch, tmp_path):
+    database_path = tmp_path / "configured.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("CREATE TABLE recovery_check (value TEXT)")
+        connection.execute("INSERT INTO recovery_check VALUES ('backup value')")
+
+    monkeypatch.setattr(database, "SQLALCHEMY_DATABASE_URL", f"sqlite:///{database_path.as_posix()}")
+    backup = client.post("/api/system/backup")
+    assert backup.status_code == 200
+
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("UPDATE recovery_check SET value = 'changed value'")
+
+    active_engine = create_engine(f"sqlite:///{database_path.as_posix()}")
+    previous_pool = active_engine.pool
+    monkeypatch.setattr(system_router, "engine", active_engine)
     restored = client.post("/api/system/restore", params={"backup_file": backup.json()["backup_file"]})
 
-    assert restored.status_code == 200
-    assert database_path.read_bytes() == b"configured database"
-    assert Path(restored.json()["pre_restore_backup"]).read_bytes() == b"changed database"
+    try:
+        assert restored.status_code == 200
+        assert restored.json()["restart_required"] is True
+        assert active_engine.pool is not previous_pool
+        with sqlite3.connect(database_path) as connection:
+            assert connection.execute("SELECT value FROM recovery_check").fetchone() == ("backup value",)
+        with sqlite3.connect(restored.json()["pre_restore_backup"]) as connection:
+            assert connection.execute("SELECT value FROM recovery_check").fetchone() == ("changed value",)
+    finally:
+        active_engine.dispose()
 
 
 @pytest.mark.parametrize("database_url", ["sqlite://", "sqlite:///:memory:", "postgresql://example/sellhelp"])

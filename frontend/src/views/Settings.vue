@@ -206,6 +206,7 @@ import {
   getExternalMarketSyncStatus, restoreDatabase, deleteBackup as deleteBackupApi,
   updateExternalMarketSyncSchedule
 } from '@/api'
+import { requestDesktopBackendRestart } from '@/utils/desktop'
 
 const activeTab = ref('info')
 const systemInfo = ref(null)
@@ -316,8 +317,9 @@ const restoreBackup = async (row) => {
       '危险操作',
       { type: 'error' }
     )
-    await restoreDatabase(row.filename)
-    ElMessage.success('恢复成功，请重启系统')
+    const result = await restoreDatabase(row.filename)
+    const restarting = result.restart_required && await requestDesktopBackendRestart()
+    ElMessage.success(restarting ? '恢复成功，正在重启系统' : '恢复成功，请重启系统')
   } catch (e) { /* handled */ }
 }
 
