@@ -165,6 +165,23 @@ test.describe.serial('critical inventory workflow', () => {
     expect(failures).toEqual([])
   })
 
+  test('expanded sidebar scrolls to every navigation group', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 })
+    await signIn(page, 'e2e-owner')
+
+    await page.locator('.el-sub-menu__title').last().click()
+    await page.waitForTimeout(300)
+    await page.locator('.el-sub-menu__title').first().click()
+    await page.waitForTimeout(300)
+
+    const aside = page.locator('.app-aside')
+    await expect.poll(() => aside.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true)
+    await aside.hover()
+    await page.mouse.wheel(0, 600)
+    await expect.poll(() => aside.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
+    await expect(page.getByText('审计日志', { exact: true })).toBeVisible()
+  })
+
   test('non-owner roles cannot access owner navigation, pages, or exports', async ({ page }) => {
     await signIn(page, 'e2e-warehouse')
     await expect(page.getByText('报表中心', { exact: true })).toHaveCount(0)

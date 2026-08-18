@@ -231,7 +231,8 @@ const handleAccountCommand = async command => {
 .app-aside {
   background: var(--shell-sidebar);
   border-right: 1px solid var(--shell-sidebar-border);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .brand {
