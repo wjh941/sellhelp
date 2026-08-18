@@ -121,6 +121,36 @@ test.describe.serial('critical inventory workflow', () => {
     expect((await download).suggestedFilename()).toMatch(/\.xlsx$/)
   })
 
+  test('authenticated reload keeps the JWT for product data requests', async ({ page }) => {
+    const failures = []
+    page.on('response', response => {
+      if (new URL(response.url()).pathname.startsWith('/api/') && response.status() >= 400) {
+        failures.push(`${response.status()} ${new URL(response.url()).pathname}`)
+      }
+    })
+
+    await signIn(page, 'e2e-owner')
+    failures.length = 0
+    await page.goto('/products')
+    await expect(page).toHaveURL(/\/products$/)
+    await page.waitForTimeout(500)
+    expect(failures).toEqual([])
+  })
+
+  test('warehouse dashboard does not fail on owner-only slow-product data', async ({ page }) => {
+    const failures = []
+    page.on('response', response => {
+      if (new URL(response.url()).pathname === '/api/system/slow-products') {
+        failures.push(response.status())
+      }
+    })
+
+    await signIn(page, 'e2e-warehouse')
+    await page.goto('/')
+    await expect(page.getByText('数据未能完整加载，请检查服务后重试。')).toHaveCount(0)
+    expect(failures).toEqual([])
+  })
+
   test('non-owner roles cannot access owner navigation, pages, or exports', async ({ page }) => {
     await signIn(page, 'e2e-warehouse')
     await expect(page.getByText('报表中心', { exact: true })).toHaveCount(0)

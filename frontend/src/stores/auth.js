@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { getCurrentUser, login as loginRequest, logout as logoutRequest, setAuthToken } from '@/api'
+import { getAuthToken, getCurrentUser, login as loginRequest, logout as logoutRequest, setAuthToken } from '@/api'
 
 const authState = reactive({
   initialized: false,
@@ -52,7 +52,7 @@ export const initializeAuthentication = async (force = false) => {
   const requestIdentityVersion = identityVersion
   initialization = getCurrentUser()
     .then(identity => {
-      applyIdentity(identity)
+      applyIdentity(identity, getAuthToken())
       return true
     })
     .catch(() => {

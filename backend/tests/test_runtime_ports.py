@@ -11,7 +11,8 @@ def test_runtime_configuration_uses_8001_for_the_backend():
     main_module = (PROJECT_ROOT / "backend" / "app" / "main.py").read_text(encoding="utf-8")
     init_module = (PROJECT_ROOT / "backend" / "app" / "init_data.py").read_text(encoding="utf-8")
 
-    assert "target: 'http://localhost:8001'" in vite_config
+    assert "process.env.VITE_API_PROXY_TARGET || 'http://localhost:8001'" in vite_config
+    assert "target: apiProxyTarget" in vite_config
     assert "--port 8001" in start_script
     assert "http://localhost:8001/docs" in start_script
     assert "http://localhost:8001/docs" in readme

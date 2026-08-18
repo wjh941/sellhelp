@@ -73,6 +73,25 @@ def test_standalone_mode_exposes_virtual_owner_without_login(client):
     }
 
 
+def test_first_owner_bootstrap_is_available_once_and_disables_standalone_mode(client, db_session):
+    seed_builtin_roles(db_session)
+
+    assert client.get("/api/auth/bootstrap-status").json() == {"can_initialize": True}
+    response = client.post(
+        "/api/auth/bootstrap-owner",
+        json={"username": "admin", "display_name": "Administrator", "password": "SellHelp@2026!"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["role_codes"] == ["owner"]
+    assert client.get("/api/auth/bootstrap-status").json() == {"can_initialize": False}
+    assert client.post(
+        "/api/auth/bootstrap-owner",
+        json={"username": "another-admin", "display_name": "Another Administrator", "password": "SellHelp@2026!"},
+    ).status_code == 409
+    assert db_session.query(SystemConfig).filter_by(key="standalone_mode").one().value == "false"
+
+
 def test_disabled_standalone_mode_rejects_unauthenticated_business_write(client, db_session):
     """Removing the global guard would let an unauthenticated caller create inventory master data."""
     set_standalone_mode(db_session, False)

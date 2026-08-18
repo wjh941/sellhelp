@@ -19,14 +19,25 @@
         </el-form-item>
         <el-button type="primary" native-type="submit" class="login-submit" :loading="submitting">登录</el-button>
       </el-form>
+      <el-button v-if="canInitialize" text class="bootstrap-trigger" @click="showBootstrap = true">初始化管理员</el-button>
+
+      <el-dialog v-model="showBootstrap" title="初始化管理员" append-to-body width="min(440px, calc(100vw - 32px))">
+        <el-form ref="bootstrapFormRef" :model="bootstrapForm" :rules="rules" label-position="top">
+          <el-form-item label="账户名" prop="username"><el-input v-model.trim="bootstrapForm.username" /></el-form-item>
+          <el-form-item label="显示名称" prop="display_name"><el-input v-model.trim="bootstrapForm.display_name" /></el-form-item>
+          <el-form-item label="密码" prop="password"><el-input v-model="bootstrapForm.password" type="password" show-password /></el-form-item>
+        </el-form>
+        <template #footer><el-button @click="showBootstrap = false">取消</el-button><el-button type="primary" :loading="bootstrapping" @click="bootstrap">创建管理员</el-button></template>
+      </el-dialog>
     </section>
   </main>
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Lock, Shop, User } from '@element-plus/icons-vue'
+import { bootstrapOwner, getBootstrapStatus } from '@/api'
 import { useAuth } from '@/stores/auth'
 
 const router = useRouter()
@@ -34,11 +45,18 @@ const route = useRoute()
 const auth = useAuth()
 const formRef = ref()
 const submitting = ref(false)
+const bootstrapping = ref(false)
+const canInitialize = ref(false)
+const showBootstrap = ref(false)
 const form = reactive({ username: '', password: '' })
+const bootstrapFormRef = ref()
+const bootstrapForm = reactive({ username: 'admin', display_name: '管理员', password: 'SellHelp@2026!' })
 const rules = {
   username: [{ required: true, message: '请输入账户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 }
+
+onMounted(async () => { canInitialize.value = Boolean((await getBootstrapStatus()).can_initialize) })
 
 const submit = async () => {
   await formRef.value?.validate()
@@ -51,6 +69,18 @@ const submit = async () => {
     // The API interceptor shows the authentication error.
   } finally {
     submitting.value = false
+  }
+}
+
+const bootstrap = async () => {
+  await bootstrapFormRef.value?.validate()
+  bootstrapping.value = true
+  try {
+    await bootstrapOwner(bootstrapForm)
+    await auth.signIn({ username: bootstrapForm.username, password: bootstrapForm.password })
+    router.replace('/')
+  } finally {
+    bootstrapping.value = false
   }
 }
 </script>

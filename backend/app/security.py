@@ -18,7 +18,7 @@ from .services.auth_service import (
 
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
-PUBLIC_PATHS = {"/api/health", "/api/auth/login"}
+PUBLIC_PATHS = {"/api/health", "/api/auth/login", "/api/auth/bootstrap-status", "/api/auth/bootstrap-owner"}
 OWNER_PREFIXES = ("/api/system", "/api/export", "/api/audit-logs", "/api/auth/users", "/api/auth/roles")
 WAREHOUSE_WRITES = (
     ("POST", re.compile(r"^/api/purchase-orders/?$")),

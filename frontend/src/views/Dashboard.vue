@@ -211,6 +211,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { echarts } from '@/utils/charts'
+import { useAuth } from '@/stores/auth'
 import {
   getDashboardMetrics,
   getDebtCustomers,
@@ -224,6 +225,7 @@ import {
 import { UI_STORAGE_KEYS, readJson, removeKey, writeJson } from '@/utils/operationUi'
 
 const router = useRouter()
+const auth = useAuth()
 const loading = ref(true)
 const loadError = ref('')
 const metrics = ref({ daily_sales: [], top_products: [] })
@@ -360,6 +362,7 @@ const loadData = async () => {
   loadError.value = ''
   disposeCharts()
   try {
+    const slowProductsRequest = auth.hasRole('owner') ? getSlowProducts() : Promise.resolve([])
     const [stock, dashboard, orders, expiry, lowStock, debts, overdue, slow] = await Promise.all([
       getStockSummary(),
       getDashboardMetrics(),
@@ -368,7 +371,7 @@ const loadData = async () => {
       getLowStockAlerts(),
       getDebtCustomers(),
       getOverdueCustomers(),
-      getSlowProducts(),
+      slowProductsRequest,
     ])
     stockSummary.value = stock || {}
     metrics.value = dashboard || { daily_sales: [], top_products: [] }

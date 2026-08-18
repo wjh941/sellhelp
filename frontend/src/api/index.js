@@ -39,6 +39,8 @@ api.interceptors.response.use(
 
 // ========== Authentication and access control ==========
 export const login = (data) => api.post('/auth/login', data, { skipAuthRedirect: true })
+export const getBootstrapStatus = () => api.get('/auth/bootstrap-status', { skipAuthRedirect: true, skipErrorMessage: true })
+export const bootstrapOwner = (data) => api.post('/auth/bootstrap-owner', data, { skipAuthRedirect: true })
 export const logout = () => api.post('/auth/logout', null, { skipAuthRedirect: true })
 export const getCurrentUser = () => api.get('/auth/me', { skipAuthRedirect: true, skipErrorMessage: true })
 export const getRoles = () => api.get('/auth/roles')

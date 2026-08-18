@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
-from ..models.all_models import AuditLog, Role, User
+from ..models.all_models import AuditLog, Role, SystemConfig, User
 from ..schemas.all_schemas import (
     AuditLogPageResponse,
     AuthUserResponse,
     LoginRequest,
     LoginResponse,
+    InitialOwnerRequest,
     RoleResponse,
     UserCreateRequest,
     UserUpdateRequest,
@@ -28,6 +29,35 @@ from ..services.auth_service import (
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 audit_router = APIRouter(prefix="/api", tags=["Audit logs"])
+
+
+@router.get("/bootstrap-status")
+def bootstrap_status(db: Session = Depends(get_db)):
+    return {"can_initialize": not db.query(User.id).first()}
+
+
+@router.post("/bootstrap-owner", response_model=AuthUserResponse, status_code=status.HTTP_201_CREATED)
+def bootstrap_owner(data: InitialOwnerRequest, db: Session = Depends(get_db)):
+    if db.query(User.id).first():
+        raise HTTPException(status_code=409, detail="Administrator initialization is no longer available")
+    owner_role = db.query(Role).filter(Role.code == "owner").first()
+    if owner_role is None:
+        raise HTTPException(status_code=503, detail="Built-in roles have not been initialized")
+    user = User(
+        username=data.username,
+        display_name=data.display_name,
+        password_hash=hash_password(data.password),
+        roles=[owner_role],
+    )
+    config = db.query(SystemConfig).filter(SystemConfig.key == "standalone_mode").first()
+    if config is None:
+        db.add(SystemConfig(key="standalone_mode", value="false", description="Require login after initial owner setup"))
+    else:
+        config.value = "false"
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user_payload(user)
 
 
 @router.post("/login", response_model=LoginResponse)

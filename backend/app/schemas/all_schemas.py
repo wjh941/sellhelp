@@ -530,6 +530,12 @@ class UserCreateRequest(BaseModel):
     role_codes: List[str] = Field(..., min_length=1)
 
 
+class InitialOwnerRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.-]+$")
+    display_name: str = Field(..., min_length=1, max_length=100)
+    password: str = Field(..., min_length=8, max_length=256)
+
+
 class UserUpdateRequest(BaseModel):
     display_name: Optional[str] = Field(None, min_length=1, max_length=100)
     password: Optional[str] = Field(None, min_length=8, max_length=256)
