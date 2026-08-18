@@ -1,5 +1,9 @@
 import logging
+import os
 import sqlite3
+import subprocess
+import sys
+from pathlib import Path
 
 from starlette.testclient import TestClient
 
@@ -89,6 +93,19 @@ def test_desktop_logging_creates_utf8_rotating_log_file(tmp_path):
     assert log_path.read_text(encoding="utf-8").endswith("desktop startup log entry\n")
 
 
+def test_desktop_logging_rolls_over_when_handler_limit_is_reached(tmp_path):
+    log_path = configure_desktop_logging(tmp_path / "logs")
+    handler = next(
+        handler for handler in logging.getLogger().handlers
+        if getattr(handler, "_sellhelp_desktop_log", False)
+    )
+    handler.maxBytes = 1
+
+    logging.getLogger("sellhelp.desktop.startup-test").warning("roll over")
+
+    assert log_path.with_name("sellhelp.log.1").is_file()
+
+
 def test_desktop_lifespan_prepares_data_before_serving_requests(monkeypatch, tmp_path):
     monkeypatch.setenv("SELLHELP_DESKTOP_MODE", "1")
     monkeypatch.setenv("SELLHELP_DATA_DIR", str(tmp_path))
@@ -97,3 +114,48 @@ def test_desktop_lifespan_prepares_data_before_serving_requests(monkeypatch, tmp
         assert role_codes_from_database(tmp_path / "data" / "sellhelp.db") == {
             "owner", "warehouse_operator", "sales_clerk",
         }
+
+
+def test_desktop_entrypoint_uses_selected_database_despite_inherited_database_url(tmp_path):
+    data_dir = tmp_path / "SellHelp"
+    inherited_database = tmp_path / "inherited.db"
+    script = f"""
+import desktop_main
+from starlette.testclient import TestClient
+
+def launch(*_args, **_kwargs):
+    from app.main import app
+    with TestClient(app) as client:
+        assert client.get('/api/auth/bootstrap-status').json() == {{'can_initialize': True}}
+        created = client.post('/api/auth/bootstrap-owner', json={{
+            'username': 'owner', 'display_name': 'Owner', 'password': 'password123',
+        }})
+        assert created.status_code == 201, created.text
+        login = client.post('/api/auth/login', json={{'username': 'owner', 'password': 'password123'}})
+        assert login.status_code == 200, login.text
+        roles = client.get('/api/auth/roles', headers={{'Authorization': 'Bearer ' + login.json()['access_token']}})
+        assert {{role['code'] for role in roles.json()}} == {{'owner', 'warehouse_operator', 'sales_clerk'}}
+
+desktop_main.uvicorn.run = launch
+desktop_main.main(['--data-dir', {str(data_dir)!r}, '--port', '18101'])
+"""
+    environment = os.environ.copy()
+    environment.update({
+        "SELLHELP_DATABASE_URL": f"sqlite:///{inherited_database.as_posix()}",
+        "SELLHELP_DISABLE_MARKET_SYNC_SCHEDULER": "1",
+    })
+    environment.pop("SELLHELP_DESKTOP_MODE", None)
+    environment.pop("SELLHELP_DATA_DIR", None)
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=Path(__file__).resolve().parent.parent,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert role_codes_from_database(data_dir / "data" / "sellhelp.db") == {
+        "owner", "warehouse_operator", "sales_clerk",
+    }
+    assert not inherited_database.exists()

@@ -78,6 +78,7 @@ def test_desktop_entrypoint_enables_desktop_mode_and_binds_loopback(monkeypatch)
         "SELLHELP_DESKTOP_MODE",
         "SELLHELP_DATA_DIR",
         "SELLHELP_STATIC_DIR",
+        "SELLHELP_DATABASE_URL",
     )
     original_environment = {name: os.getenv(name) for name in desktop_environment_names}
     for name in desktop_environment_names:

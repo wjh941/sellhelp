@@ -7,6 +7,7 @@ from app.desktop_runtime import parse_desktop_args
 
 def main(argv=None) -> None:
     args = parse_desktop_args(argv)
+    os.environ.pop("SELLHELP_DATABASE_URL", None)
     environment = {
         "SELLHELP_DESKTOP_MODE": "1",
         "SELLHELP_DATA_DIR": str(args.data_dir),
