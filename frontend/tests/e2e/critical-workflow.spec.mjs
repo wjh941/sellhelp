@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
+import { resolveE2eBackendUrl } from './runtime.mjs'
 
-const backendUrl = process.env.SELLHELP_E2E_BACKEND_URL || 'http://127.0.0.1:8005'
+const backendUrl = resolveE2eBackendUrl(process.env)
 const password = 'sellhelp-e2e-password'
 let saleOrderNo = ''
 

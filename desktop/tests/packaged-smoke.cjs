@@ -5,6 +5,10 @@ const { tmpdir } = require('node:os')
 const path = require('node:path')
 
 const { findLoopbackPort } = require('../runtime.cjs')
+const {
+  findPackagedWindowTarget,
+  isReadyPackagedWindowState,
+} = require('./packaged-smoke-runtime.cjs')
 
 const TEST_DIRECTORY_PREFIX = 'sellhelp-packaged-smoke-'
 const PRECONDITION_EXIT_CODE = 2
@@ -161,6 +165,67 @@ async function waitForDebuggerPort(port) {
   throw new Error('Electron remote debugger did not become available for graceful shutdown')
 }
 
+function evaluatePackagedWindow(target) {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(target.webSocketDebuggerUrl)
+    const timeout = setTimeout(() => {
+      socket.close()
+      reject(new Error('Timed out evaluating the packaged Electron window'))
+    }, 10_000)
+    socket.addEventListener('open', () => {
+      socket.send(JSON.stringify({
+        id: 1,
+        method: 'Runtime.evaluate',
+        params: {
+          expression: '({ origin: location.origin, appChildCount: document.querySelector("#app")?.childElementCount ?? 0 })',
+          returnByValue: true,
+        },
+      }))
+    }, { once: true })
+    socket.addEventListener('error', () => {
+      clearTimeout(timeout)
+      reject(new Error('Could not connect to the packaged Electron window'))
+    }, { once: true })
+    socket.addEventListener('message', (event) => {
+      try {
+        const message = JSON.parse(event.data)
+        if (message.id !== 1) {
+          return
+        }
+        clearTimeout(timeout)
+        socket.close()
+        resolve(message.result?.result?.value)
+      } catch (error) {
+        clearTimeout(timeout)
+        socket.close()
+        reject(error)
+      }
+    })
+  })
+}
+
+async function waitForPackagedWindow(origin, debugPort) {
+  const deadline = Date.now() + 30_000
+  let lastError
+  while (Date.now() < deadline) {
+    try {
+      const targets = await fetch(`http://127.0.0.1:${debugPort}/json/list`).then((response) => response.json())
+      const target = findPackagedWindowTarget(targets, origin)
+      if (target) {
+        const state = await evaluatePackagedWindow(target)
+        if (isReadyPackagedWindowState(state, origin)) {
+          return
+        }
+        lastError = new Error('Packaged Electron window has not rendered the application root')
+      }
+    } catch (error) {
+      lastError = error
+    }
+    await wait(250)
+  }
+  throw new Error(`Packaged Electron window did not render the local UI${lastError ? `: ${lastError.message}` : ''}`)
+}
+
 async function closeElectronGracefully(debugPort) {
   const version = await waitForDebuggerPort(debugPort)
   const socket = new WebSocket(version.webSocketDebuggerUrl)
@@ -205,6 +270,7 @@ async function verifyInstalledApplication(applicationPath, localAppData, debugPo
   let endpoint
   try {
     endpoint = await waitForBackendEndpoint(application.pid)
+    await waitForPackagedWindow(endpoint.origin, debugPort)
     const health = await fetch(`${endpoint.origin}/api/health`)
     assert.equal(health.ok, true, 'health must be served by the loopback origin')
     const interfaceResponse = await fetch(`${endpoint.origin}/`)

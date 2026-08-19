@@ -15,6 +15,18 @@ export function readE2ePort(value, fallback, name) {
   return port
 }
 
+export function resolveE2eBackendUrl(environment = process.env) {
+  if (environment.SELLHELP_E2E_BACKEND_URL) {
+    return environment.SELLHELP_E2E_BACKEND_URL
+  }
+  const port = readE2ePort(
+    environment.SELLHELP_E2E_BACKEND_PORT,
+    8005,
+    'SELLHELP_E2E_BACKEND_PORT',
+  )
+  return `http://127.0.0.1:${port}`
+}
+
 export function createManagedE2eRuntime({ backendPort, frontendPort }) {
   validatePort(backendPort, 'backendPort')
   validatePort(frontendPort, 'frontendPort')
@@ -22,7 +34,7 @@ export function createManagedE2eRuntime({ backendPort, frontendPort }) {
     throw new RangeError('backendPort and frontendPort must be different')
   }
 
-  const backendUrl = `http://127.0.0.1:${backendPort}`
+  const backendUrl = resolveE2eBackendUrl({ SELLHELP_E2E_BACKEND_PORT: String(backendPort) })
   const frontendUrl = `http://127.0.0.1:${frontendPort}`
   return {
     backendPort,
