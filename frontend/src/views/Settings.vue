@@ -92,6 +92,57 @@
             </template>
           </el-alert>
 
+          <el-divider content-position="left">异地副本</el-divider>
+
+          <el-descriptions v-if="replicaStatus" :column="2" border class="replica-backup-status">
+            <el-descriptions-item label="异地副本">
+              <el-tag :type="replicaStatus.configured ? 'success' : 'info'">
+                {{ replicaStatus.configured ? '已配置' : (replicaStatus.enabled ? '未配置' : '当前模式不可用') }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="备份位置">
+              <span class="replica-directory-name">
+                {{ replicaStatus.configured ? replicaStatus.directory_name : '未选择目录' }}
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item label="保留策略">
+              {{ replicaStatus.configured ? `保留 ${replicaStatus.retention_count} 份自动副本` : '选择异地目录后启用' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="同步状态">
+              {{ replicaStatus.is_pending ? '等待下一次检查' : (replicaStatus.last_success ? '同步正常' : '尚未同步') }}
+            </el-descriptions-item>
+            <el-descriptions-item label="最近同步">
+              {{ formatDate(replicaStatus.last_success?.completed_at) }}
+            </el-descriptions-item>
+          </el-descriptions>
+
+          <div v-if="canSelectBackupReplica" class="replica-actions">
+            <el-button type="primary" plain :loading="replicaSaving" @click="chooseBackupReplicaDirectory">
+              <el-icon><FolderOpened /></el-icon>{{ replicaStatus?.configured ? '更换目录' : '选择目录' }}
+            </el-button>
+            <el-button
+              v-if="replicaStatus?.configured"
+              type="warning"
+              plain
+              :loading="replicaSaving"
+              @click="disableConfiguredBackupReplica"
+            >
+              停用异地副本
+            </el-button>
+          </div>
+
+          <el-alert
+            v-if="replicaStatus?.last_failure"
+            type="warning"
+            :closable="false"
+            show-icon
+            class="replica-backup-error"
+          >
+            <template #title>
+              异地副本最近一次失败（{{ replicaStatus.last_failure.error_type }}）。请检查目标磁盘或网络目录后保持程序运行，系统会在下一次检查时重试。
+            </template>
+          </el-alert>
+
           <el-row :gutter="16" class="stat-row">
             <el-col :span="8">
               <div class="stat-card blue">
@@ -235,6 +286,7 @@ import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getSystemInfo, backupDatabase, getBackups, getBackupStatus,
+  getBackupReplicaStatus, configureBackupReplica, disableBackupReplica,
   getExternalMarketSyncStatus, restoreDatabase, deleteBackup as deleteBackupApi,
   updateExternalMarketSyncSchedule
 } from '@/api'
@@ -248,6 +300,8 @@ const backups = ref([])
 const backupLoading = ref(false)
 const backingUp = ref(false)
 const backupStatus = ref(null)
+const replicaStatus = ref(null)
+const replicaSaving = ref(false)
 const marketSyncStatus = ref(null)
 const marketSyncLoading = ref(false)
 const savingMarketSync = ref(false)
@@ -273,6 +327,10 @@ const lastBackupTime = computed(() => {
   if (!backups.value.length) return '无'
   return formatDate(backups.value[0].created_at)
 })
+
+const canSelectBackupReplica = computed(() => (
+  typeof window !== 'undefined' && typeof window.sellhelp?.selectBackupDirectory === 'function'
+))
 
 const formatMarketRun = (run) => {
   if (!run) return '暂无运行记录'
@@ -317,12 +375,46 @@ const loadInfo = async () => {
 const loadBackups = async () => {
   backupLoading.value = true
   try {
-    const [result, status] = await Promise.all([getBackups(), getBackupStatus()])
+    const [result, status, replica] = await Promise.all([
+      getBackups(), getBackupStatus(), getBackupReplicaStatus()
+    ])
     backups.value = result.backups || []
     backupStatus.value = status
+    replicaStatus.value = replica
   } catch (e) { /* handled */ }
   finally {
     backupLoading.value = false
+  }
+}
+
+const chooseBackupReplicaDirectory = async () => {
+  const directory = await window.sellhelp?.selectBackupDirectory?.()
+  if (!directory) return
+  replicaSaving.value = true
+  try {
+    await configureBackupReplica(directory)
+    ElMessage.success('异地副本目录已保存')
+    await loadBackups()
+  } catch (e) { /* Axios interceptor shows the backend error. */ }
+  finally {
+    replicaSaving.value = false
+  }
+}
+
+const disableConfiguredBackupReplica = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '停用后不会删除已有异地副本，之后也不会继续同步。',
+      '停用异地副本',
+      { type: 'warning' }
+    )
+    replicaSaving.value = true
+    await disableBackupReplica()
+    ElMessage.success('异地副本已停用')
+    await loadBackups()
+  } catch (e) { /* Cancel and API errors need no additional message. */ }
+  finally {
+    replicaSaving.value = false
   }
 }
 
@@ -388,6 +480,10 @@ onMounted(() => {
 .stat-card.green { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
 .automatic-backup-status { margin-bottom: 16px; max-width: 760px; }
 .automatic-backup-error { margin-bottom: 16px; }
+.replica-backup-status { margin-bottom: 12px; max-width: 760px; }
+.replica-directory-name { overflow-wrap: anywhere; }
+.replica-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.replica-backup-error { margin-bottom: 16px; }
 .market-sync-panel { padding: 4px; }
 .market-sync-status { max-width: 560px; }
 .market-sync-schedule { margin-top: 20px; }

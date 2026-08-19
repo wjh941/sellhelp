@@ -38,7 +38,10 @@ test('Settings loads automatic backup state with the manual backup list and expo
 
   assert.match(source, /getBackupStatus/)
   assert.match(source, /backupStatus/)
-  assert.match(source, /Promise\.all\(\[getBackups\(\), getBackupStatus\(\)\]\)/)
+  assert.match(
+    source,
+    /Promise\.all\(\[\s*getBackups\(\), getBackupStatus\(\), getBackupReplicaStatus\(\)\s*\]\)/
+  )
   assert.match(source, /backupStatus\?\.last_failure/)
   assert.match(source, /backupStatus\.retention_count/)
 })
