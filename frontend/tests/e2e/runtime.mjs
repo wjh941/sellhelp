@@ -21,7 +21,7 @@ export function resolveE2eBackendUrl(environment = process.env) {
     8005,
     'SELLHELP_E2E_BACKEND_PORT',
   )
-  const origin = `http://127.0.0.1:${port}`
+  const origin = new URL(`http://127.0.0.1:${port}`).origin
   if (environment.SELLHELP_E2E_BACKEND_URL && new URL(environment.SELLHELP_E2E_BACKEND_URL).origin !== origin) {
     throw new RangeError('SELLHELP_E2E_BACKEND_URL must match SELLHELP_E2E_BACKEND_PORT')
   }

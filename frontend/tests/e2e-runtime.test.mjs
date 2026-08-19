@@ -29,6 +29,13 @@ test('loopback port allocator returns a usable TCP port number', async () => {
 
 test('custom E2E backend port determines the API origin and rejects a conflicting URL', () => {
   assert.equal(resolveE2eBackendUrl({ SELLHELP_E2E_BACKEND_PORT: '18115' }), 'http://127.0.0.1:18115')
+  assert.equal(
+    resolveE2eBackendUrl({
+      SELLHELP_E2E_BACKEND_PORT: '80',
+      SELLHELP_E2E_BACKEND_URL: 'http://127.0.0.1:80',
+    }),
+    'http://127.0.0.1',
+  )
   assert.throws(
     () => resolveE2eBackendUrl({
       SELLHELP_E2E_BACKEND_PORT: '18115',
