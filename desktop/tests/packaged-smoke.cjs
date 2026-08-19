@@ -1,7 +1,6 @@
 const assert = require('node:assert/strict')
 const { spawn, spawnSync } = require('node:child_process')
 const { existsSync, mkdtempSync, rmSync } = require('node:fs')
-const { tmpdir } = require('node:os')
 const path = require('node:path')
 
 const { findLoopbackPort } = require('../runtime.cjs')
@@ -9,8 +8,11 @@ const {
   findPackagedWindowTarget,
   isReadyPackagedWindowState,
 } = require('./packaged-smoke-runtime.cjs')
+const {
+  isOwnedSmokeDirectory,
+  smokeDirectoryPrefix,
+} = require('./packaged-smoke-paths.cjs')
 
-const TEST_DIRECTORY_PREFIX = 'sellhelp-packaged-smoke-'
 const PRECONDITION_EXIT_CODE = 2
 const DEFAULT_INSTALLER = path.resolve(__dirname, '..', 'release', 'SellHelp Setup 1.0.0.exe')
 
@@ -89,16 +91,14 @@ async function stopProcessTree(child) {
 }
 
 function temporaryDirectory() {
-  return mkdtempSync(path.join(tmpdir(), TEST_DIRECTORY_PREFIX))
+  return mkdtempSync(smokeDirectoryPrefix(process.env.LOCALAPPDATA))
 }
 
 function cleanTemporaryDirectory(directory) {
-  const resolved = path.resolve(directory)
-  const expectedParent = path.resolve(tmpdir())
-  if (path.dirname(resolved) !== expectedParent || !path.basename(resolved).startsWith(TEST_DIRECTORY_PREFIX)) {
-    throw new Error(`Refusing to remove non-smoke directory: ${resolved}`)
+  if (!isOwnedSmokeDirectory(directory, process.env.LOCALAPPDATA)) {
+    throw new Error(`Refusing to remove non-smoke directory: ${path.resolve(directory)}`)
   }
-  rmSync(resolved, { force: true, recursive: true })
+  rmSync(directory, { force: true, recursive: true })
 }
 
 function powershellText(script) {
