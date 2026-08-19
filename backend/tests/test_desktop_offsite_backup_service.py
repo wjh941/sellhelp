@@ -135,3 +135,47 @@ def test_configured_target_without_a_local_automatic_backup_is_pending(tmp_path)
         assert result["last_failure"] is None
     finally:
         engine.dispose()
+
+
+def test_configured_target_with_an_unsynced_local_backup_reports_pending(tmp_path):
+    source = create_sqlite_backup(tmp_path / "local" / "sellhelp_auto_20260819_120000000000.db")
+    target = tmp_path / "external"
+    target.mkdir()
+    session_factory, engine = create_session_factory(source)
+    service = DesktopOffsiteBackupService(source.parent, now=lambda: NOW)
+
+    try:
+        with session_factory() as db:
+            service.configure(db, target)
+            status = service.status(db, enabled=True)
+
+        assert status["configured"] is True
+        assert status["is_pending"] is True
+        assert status["last_success"] is None
+    finally:
+        engine.dispose()
+
+
+def test_replica_ignores_noncanonical_prefixed_files_when_selecting_and_pruning(tmp_path):
+    source = create_sqlite_backup(tmp_path / "local" / "sellhelp_auto_20260819_120000000000.db")
+    fake_local = source.parent / "sellhelp_auto_20261340_251111111111.db"
+    fake_local.write_bytes(b"not a generated backup")
+    target = tmp_path / "external"
+    target.mkdir()
+    create_automatic_files(target, count=14)
+    fake_replica = target / "sellhelp_auto_20261340_251111111111.db"
+    fake_replica.write_bytes(b"keep")
+    session_factory, engine = create_session_factory(source)
+    service = DesktopOffsiteBackupService(source.parent, now=lambda: NOW)
+
+    try:
+        with session_factory() as db:
+            service.configure(db, target)
+            result = service.sync_latest(db)
+
+        assert result["last_success"]["filename"] == source.name
+        assert (target / source.name).is_file()
+        assert fake_replica.read_bytes() == b"keep"
+        assert len([path for path in target.glob("sellhelp_auto_*.db") if path != fake_replica]) == 14
+    finally:
+        engine.dispose()

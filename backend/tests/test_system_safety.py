@@ -114,7 +114,7 @@ def test_backup_status_exposes_desktop_policy_without_a_database_path(client, db
     assert "path" not in json.dumps(response.json())
 
 
-def test_backup_replica_routes_redact_target_and_reject_browser_writes(client, monkeypatch, tmp_path):
+def test_backup_replica_routes_redact_target_and_reject_browser_writes(client, db_session, monkeypatch, tmp_path):
     database_path = tmp_path / "configured.db"
     database_path.touch()
     target = tmp_path / "external"
@@ -126,13 +126,24 @@ def test_backup_replica_routes_redact_target_and_reject_browser_writes(client, m
 
     configured = client.put("/api/system/backup-replica", params={"directory": str(target)})
     status = client.get("/api/system/backup-replica-status")
-    disabled = client.delete("/api/system/backup-replica")
+    generic_config = client.get("/api/system/config")
+    generic_write = client.put(
+        "/api/system/config/desktop_offsite_backup",
+        params={"value": json.dumps({"directory": "C:\\unvalidated"})},
+    )
 
     assert configured.status_code == 200
     assert status.status_code == 200
     assert status.json()["configured"] is True
     assert status.json()["directory_name"] == "external"
     assert str(target) not in json.dumps(status.json())
+    assert generic_config.status_code == 200
+    assert "desktop_offsite_backup" not in generic_config.json()
+    assert str(target) not in json.dumps(generic_config.json())
+    assert generic_write.status_code == 400
+    stored = db_session.query(SystemConfig).filter(SystemConfig.key == "desktop_offsite_backup").one()
+    assert json.loads(stored.value)["directory"] == str(target)
+    disabled = client.delete("/api/system/backup-replica")
     assert disabled.status_code == 200
     assert disabled.json()["configured"] is False
     assert preserved.is_file()

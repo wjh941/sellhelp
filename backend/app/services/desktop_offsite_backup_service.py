@@ -3,8 +3,10 @@
 import json
 import logging
 import os
+import re
 import shutil
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -21,6 +23,7 @@ from app.services.desktop_backup_service import (
 
 logger = logging.getLogger(__name__)
 OFFSITE_BACKUP_STATUS_KEY = "desktop_offsite_backup"
+_AUTOMATIC_BACKUP_FILENAME = re.compile(rf"^{re.escape(AUTO_BACKUP_PREFIX)}(\d{{8}}_\d{{12}})\.db$")
 
 
 class DesktopOffsiteBackupService:
@@ -96,10 +99,11 @@ class DesktopOffsiteBackupService:
         state = self._load_state(db)
         directory = self._configured_directory(state)
         source = self._latest_local_backup() if enabled and directory is not None else None
+        last_success = state.get("last_success") or {}
         pending = enabled and directory is not None and (
             source is None
             or state.get("last_failure") is not None
-            or state.get("last_success", {}).get("filename") != source.name
+            or last_success.get("filename") != source.name
         )
         return self._status_payload(state, enabled=enabled, pending=pending)
 
@@ -107,11 +111,30 @@ class DesktopOffsiteBackupService:
         if not self.local_backup_dir.is_dir():
             return None
         backups = sorted(
-            (path for path in self.local_backup_dir.glob(f"{AUTO_BACKUP_PREFIX}*.db") if path.is_file()),
+            self._automatic_backup_files(self.local_backup_dir),
             key=lambda path: path.name,
             reverse=True,
         )
         return backups[0] if backups else None
+
+    @staticmethod
+    def _automatic_backup_files(directory: Path):
+        return (
+            path
+            for path in directory.glob(f"{AUTO_BACKUP_PREFIX}*.db")
+            if path.is_file() and DesktopOffsiteBackupService._is_automatic_backup_file(path)
+        )
+
+    @staticmethod
+    def _is_automatic_backup_file(path: Path) -> bool:
+        match = _AUTOMATIC_BACKUP_FILENAME.fullmatch(path.name)
+        if match is None:
+            return False
+        try:
+            datetime.strptime(match.group(1), "%Y%m%d_%H%M%S%f")
+        except ValueError:
+            return False
+        return True
 
     @staticmethod
     def _validate_directory(directory) -> Path:
@@ -196,7 +219,7 @@ class DesktopOffsiteBackupService:
     @staticmethod
     def _prune_automatic_replicas(directory: Path) -> None:
         replicas = sorted(
-            (path for path in directory.glob(f"{AUTO_BACKUP_PREFIX}*.db") if path.is_file()),
+            DesktopOffsiteBackupService._automatic_backup_files(directory),
             key=lambda path: path.name,
             reverse=True,
         )

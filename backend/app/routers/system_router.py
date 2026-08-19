@@ -15,7 +15,10 @@ from ..database import active_backup_directory, engine, get_active_sqlite_db_pat
 from ..desktop_runtime import is_desktop_mode
 from ..models.all_models import Product, ProductBatch, SalesOrder, SalesOrderItem, SystemConfig, WeeklyReport
 from ..services.desktop_backup_service import DesktopBackupService
-from ..services.desktop_offsite_backup_service import DesktopOffsiteBackupService
+from ..services.desktop_offsite_backup_service import (
+    OFFSITE_BACKUP_STATUS_KEY,
+    DesktopOffsiteBackupService,
+)
 
 router = APIRouter(prefix="/api/system", tags=["系统管理"])
 
@@ -443,7 +446,7 @@ def _calculate_stock_health(stock_list: list) -> dict:
 @router.get("/config")
 def get_system_config(db: Session = Depends(get_db)):
     """获取系统配置"""
-    configs = db.query(SystemConfig).all()
+    configs = db.query(SystemConfig).filter(SystemConfig.key != OFFSITE_BACKUP_STATUS_KEY).all()
     result = {}
     for c in configs:
         try:
@@ -461,6 +464,8 @@ def update_system_config(
     db: Session = Depends(get_db)
 ):
     """更新系统配置"""
+    if key == OFFSITE_BACKUP_STATUS_KEY:
+        raise HTTPException(status_code=400, detail="Desktop backup replica state is managed by the desktop app")
     config = db.query(SystemConfig).filter(SystemConfig.key == key).first()
     if config:
         config.value = value
