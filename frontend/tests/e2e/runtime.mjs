@@ -16,15 +16,16 @@ export function readE2ePort(value, fallback, name) {
 }
 
 export function resolveE2eBackendUrl(environment = process.env) {
-  if (environment.SELLHELP_E2E_BACKEND_URL) {
-    return environment.SELLHELP_E2E_BACKEND_URL
-  }
   const port = readE2ePort(
     environment.SELLHELP_E2E_BACKEND_PORT,
     8005,
     'SELLHELP_E2E_BACKEND_PORT',
   )
-  return `http://127.0.0.1:${port}`
+  const origin = `http://127.0.0.1:${port}`
+  if (environment.SELLHELP_E2E_BACKEND_URL && new URL(environment.SELLHELP_E2E_BACKEND_URL).origin !== origin) {
+    throw new RangeError('SELLHELP_E2E_BACKEND_URL must match SELLHELP_E2E_BACKEND_PORT')
+  }
+  return origin
 }
 
 export function createManagedE2eRuntime({ backendPort, frontendPort }) {
