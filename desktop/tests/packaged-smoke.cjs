@@ -10,8 +10,12 @@ const {
 } = require('./packaged-smoke-runtime.cjs')
 const {
   isOwnedSmokeDirectory,
+  smokeDirectoryRemovalOptions,
   smokeDirectoryPrefix,
+  smokeUninstallerCleanupDelay,
 } = require('./packaged-smoke-paths.cjs')
+const { registeredSellHelpInstallations } = require('./packaged-smoke-preflight.cjs')
+const { shouldRunCleanupUninstaller } = require('./packaged-smoke-cleanup.cjs')
 
 const PRECONDITION_EXIT_CODE = 2
 const DEFAULT_INSTALLER = path.resolve(__dirname, '..', 'release', 'SellHelp Setup 1.0.0.exe')
@@ -78,6 +82,11 @@ async function runChecked(command, args, options, description) {
   }
 }
 
+async function runUninstaller(command, args, description) {
+  await runChecked(command, args, { stdio: 'ignore' }, description)
+  await wait(smokeUninstallerCleanupDelay())
+}
+
 async function stopProcessTree(child) {
   if (!child?.pid || child.exitCode !== null) {
     return
@@ -98,7 +107,7 @@ function cleanTemporaryDirectory(directory) {
   if (!isOwnedSmokeDirectory(directory, process.env.LOCALAPPDATA)) {
     throw new Error(`Refusing to remove non-smoke directory: ${path.resolve(directory)}`)
   }
-  rmSync(directory, { force: true, recursive: true })
+  rmSync(directory, smokeDirectoryRemovalOptions())
 }
 
 function powershellText(script) {
@@ -110,6 +119,15 @@ function powershellText(script) {
     throw new Error(`PowerShell inspection failed: ${completed.stderr || completed.stdout}`)
   }
   return completed.stdout.trim()
+}
+
+function existingSellHelpInstallations() {
+  const serialized = powershellText([
+    "$registryPaths = @('HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall', 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall', 'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall')",
+    '$entries = foreach ($registryPath in $registryPaths) { if (Test-Path -LiteralPath $registryPath) { Get-ChildItem -LiteralPath $registryPath | Get-ItemProperty | Select-Object DisplayName, InstallLocation } }',
+    '$entries | ConvertTo-Json -Compress',
+  ].join('; '))
+  return registeredSellHelpInstallations(serialized)
 }
 
 function backendProcessId(applicationPid) {
@@ -336,8 +354,15 @@ async function verifyInstalledApplication(applicationPath, localAppData, debugPo
 
 async function main() {
   const installer = requireInstaller(process.argv.slice(2))
+  const existingInstallations = existingSellHelpInstallations()
+  if (existingInstallations.length > 0) {
+    throw new SmokePreconditionError(
+      `Packaged smoke will not run while SellHelp is already installed (${existingInstallations.join(', ')}). Use an isolated Windows user or VM.`,
+    )
+  }
   const root = temporaryDirectory()
   let uninstallerPath = null
+  let uninstalled = false
   try {
     const installDirectory = path.join(root, 'application')
     const localAppData = path.join(root, 'local-app-data')
@@ -362,12 +387,13 @@ async function main() {
     if (!existsSync(uninstallerPath)) {
       throw new Error(`NSIS installer did not create ${uninstallerPath}`)
     }
-    await runChecked(uninstallerPath, ['/S'], { stdio: 'ignore' }, 'NSIS uninstallation')
+    await runUninstaller(uninstallerPath, ['/S'], 'NSIS uninstallation')
+    uninstalled = true
     assert.equal(existsSync(dataDatabase), true, 'NSIS uninstallation must preserve desktop data')
     console.log('Packaged smoke passed: same-origin startup, persistence, XLSX export, child cleanup, and uninstall data preservation verified.')
   } finally {
-    if (uninstallerPath && existsSync(uninstallerPath)) {
-      await runChecked(uninstallerPath, ['/S'], { stdio: 'ignore' }, 'NSIS cleanup uninstallation')
+    if (shouldRunCleanupUninstaller({ uninstalled, uninstallerExists: uninstallerPath && existsSync(uninstallerPath) })) {
+      await runUninstaller(uninstallerPath, ['/S'], 'NSIS cleanup uninstallation')
     }
     cleanTemporaryDirectory(root)
   }

@@ -19,7 +19,22 @@ function isOwnedSmokeDirectory(directory, localAppData) {
   return path.dirname(resolved) === parent && path.basename(resolved).startsWith(TEST_DIRECTORY_PREFIX)
 }
 
+function smokeDirectoryRemovalOptions() {
+  return {
+    force: true,
+    maxRetries: 20,
+    recursive: true,
+    retryDelay: 250,
+  }
+}
+
+function smokeUninstallerCleanupDelay() {
+  return 30_000
+}
+
 module.exports = {
   isOwnedSmokeDirectory,
+  smokeDirectoryRemovalOptions,
   smokeDirectoryPrefix,
+  smokeUninstallerCleanupDelay,
 }

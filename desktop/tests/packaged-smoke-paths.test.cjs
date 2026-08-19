@@ -4,7 +4,9 @@ const test = require('node:test')
 
 const {
   isOwnedSmokeDirectory,
+  smokeDirectoryRemovalOptions,
   smokeDirectoryPrefix,
+  smokeUninstallerCleanupDelay,
 } = require('./packaged-smoke-paths.cjs')
 
 test('packaged smoke creates and cleans only its own LocalAppData directory', () => {
@@ -19,4 +21,17 @@ test('packaged smoke creates and cleans only its own LocalAppData directory', ()
 
 test('packaged smoke requires a LocalAppData parent for executable installation', () => {
   assert.throws(() => smokeDirectoryPrefix(''), /LOCALAPPDATA must be set/)
+})
+
+test('packaged smoke retries transient Windows directory locks during cleanup', () => {
+  assert.deepEqual(smokeDirectoryRemovalOptions(), {
+    force: true,
+    maxRetries: 20,
+    recursive: true,
+    retryDelay: 250,
+  })
+})
+
+test('packaged smoke gives NSIS time to finish its self-deletion before cleanup', () => {
+  assert.equal(smokeUninstallerCleanupDelay(), 30_000)
 })
