@@ -19,6 +19,7 @@ from app.desktop_runtime import desktop_data_dir, desktop_static_dir, is_desktop
 from app.desktop_startup import prepare_desktop_startup
 from app.security import PermissionMiddleware
 from app.services.market_sync_scheduler import market_sync_scheduler
+from app.services.desktop_backup_scheduler import desktop_backup_scheduler
 
 # 导入所有路由
 from app.routers.product_router import router as product_router
@@ -42,19 +43,27 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
-        shutdown_market_sync_scheduler()
+        shutdown_runtime_services()
 
 
 def initialize_database():
     if is_desktop_mode():
         prepare_desktop_startup(desktop_data_dir())
     init_db()
+    if is_desktop_mode():
+        desktop_backup_scheduler.start()
     if os.getenv("SELLHELP_DISABLE_MARKET_SYNC_SCHEDULER") != "1":
         market_sync_scheduler.start()
 
 
 def shutdown_market_sync_scheduler():
     market_sync_scheduler.shutdown()
+
+
+def shutdown_runtime_services():
+    if is_desktop_mode():
+        desktop_backup_scheduler.shutdown()
+    shutdown_market_sync_scheduler()
 
 
 class SpaStaticFiles(StaticFiles):
