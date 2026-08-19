@@ -60,6 +60,38 @@
             </template>
           </el-alert>
 
+          <el-descriptions v-if="backupStatus" :column="2" border class="automatic-backup-status">
+            <el-descriptions-item label="自动备份">
+              <el-tag :type="backupStatus.enabled ? 'success' : 'info'">
+                {{ backupStatus.enabled ? '已启用' : '当前模式不可用' }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="保留策略">
+              <span v-if="backupStatus.enabled">
+                每 {{ backupStatus.interval_hours }} 小时检查，保留 {{ backupStatus.retention_count }} 份自动备份
+              </span>
+              <span v-else>仅 Windows 桌面版可自动备份</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="最近自动备份">
+              {{ formatDate(backupStatus.last_success?.completed_at) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="备份状态">
+              {{ backupStatus.is_due ? '等待下一次检查' : '运行正常' }}
+            </el-descriptions-item>
+          </el-descriptions>
+
+          <el-alert
+            v-if="backupStatus?.last_failure"
+            type="warning"
+            :closable="false"
+            show-icon
+            class="automatic-backup-error"
+          >
+            <template #title>
+              自动备份最近一次失败（{{ backupStatus.last_failure.error_type }}）。请检查本机磁盘空间后保持程序运行，系统会自动重试。
+            </template>
+          </el-alert>
+
           <el-row :gutter="16" class="stat-row">
             <el-col :span="8">
               <div class="stat-card blue">
@@ -201,8 +233,8 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { 
-  getSystemInfo, backupDatabase, getBackups, 
+import {
+  getSystemInfo, backupDatabase, getBackups, getBackupStatus,
   getExternalMarketSyncStatus, restoreDatabase, deleteBackup as deleteBackupApi,
   updateExternalMarketSyncSchedule
 } from '@/api'
@@ -215,6 +247,7 @@ const infoLoading = ref(false)
 const backups = ref([])
 const backupLoading = ref(false)
 const backingUp = ref(false)
+const backupStatus = ref(null)
 const marketSyncStatus = ref(null)
 const marketSyncLoading = ref(false)
 const savingMarketSync = ref(false)
@@ -284,8 +317,9 @@ const loadInfo = async () => {
 const loadBackups = async () => {
   backupLoading.value = true
   try {
-    const result = await getBackups()
+    const [result, status] = await Promise.all([getBackups(), getBackupStatus()])
     backups.value = result.backups || []
+    backupStatus.value = status
   } catch (e) { /* handled */ }
   finally {
     backupLoading.value = false
@@ -352,6 +386,8 @@ onMounted(() => {
 .stat-card.blue { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
 .stat-card.orange { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
 .stat-card.green { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+.automatic-backup-status { margin-bottom: 16px; max-width: 760px; }
+.automatic-backup-error { margin-bottom: 16px; }
 .market-sync-panel { padding: 4px; }
 .market-sync-status { max-width: 560px; }
 .market-sync-schedule { margin-top: 20px; }

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node --test tests/external-market-api.test.mjs tests/external-market-url.test.mjs tests/operation-ui.test.mjs tests/phase2-archives.test.mjs tests/phase2-inventory.test.mjs tests/phase2-market-reports.test.mjs tests/phase3-exports.test.mjs tests/phase4-hardening.test.mjs tests/e2e-runtime.test.mjs tests/e2e-backend-script.test.mjs",
+    "test": "node --test tests/external-market-api.test.mjs tests/external-market-url.test.mjs tests/operation-ui.test.mjs tests/phase2-archives.test.mjs tests/phase2-inventory.test.mjs tests/phase2-market-reports.test.mjs tests/phase3-exports.test.mjs tests/phase4-hardening.test.mjs tests/desktop-backup-ui.test.mjs tests/e2e-runtime.test.mjs tests/e2e-backend-script.test.mjs",
     "test:e2e": "node tests/e2e/run.mjs",
     "build": "vite build",
     "preview": "vite preview"

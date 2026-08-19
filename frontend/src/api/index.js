@@ -157,6 +157,7 @@ export const batchRepay = (data) => api.post('/finance/batch-repay', data)
 // ========== 系统管理 ==========
 export const backupDatabase = () => api.post('/system/backup')
 export const getBackups = () => api.get('/system/backups')
+export const getBackupStatus = () => api.get('/system/backup-status')
 export const restoreDatabase = (filename) => api.post('/system/restore', null, { params: { backup_file: filename } })
 export const deleteBackup = (filename) => api.delete(`/system/backups/${filename}`)
 export const getSystemConfig = () => api.get('/system/config')
