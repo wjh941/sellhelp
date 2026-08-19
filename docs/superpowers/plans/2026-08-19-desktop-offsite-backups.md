@@ -29,7 +29,7 @@
 - `configure(db, directory)`, `disable(db)`, `sync_latest(db)`, and `status(db, enabled)`.
 - Status fields: `enabled`, `configured`, `directory_name`, `retention_count`, `is_pending`, `last_success`, `last_failure`.
 
-- [ ] **Step 1: Write failing file-backed tests**
+- [x] **Step 1: Write failing file-backed tests**
 
 ```python
 def test_replica_is_readable_and_keeps_only_automatic_files(tmp_path, session_factory):
@@ -65,13 +65,13 @@ def test_failure_cleans_temp_and_retry_succeeds(tmp_path, session_factory):
 
 Also cover relative/missing/unwritable target rejection, no source as pending, basename-only status, and disable retaining files.
 
-- [ ] **Step 2: Run RED test**
+- [x] **Step 2: Run RED test**
 
 Run: `python -m pytest backend/tests/test_desktop_offsite_backup_service.py -v`
 
 Expected: module import failure.
 
-- [ ] **Step 3: Implement the minimal service**
+- [x] **Step 3: Implement the minimal service**
 
 ```python
 def sync_latest(self, db: Session) -> dict:
@@ -94,7 +94,7 @@ def sync_latest(self, db: Session) -> dict:
 
 Use `desktop_offsite_backup` in `SystemConfig`. Validate an absolute existing directory through a UUID create/unlink probe. Require `PRAGMA quick_check` to return `ok`, return only the directory basename, and sort only automatic filenames for pruning.
 
-- [ ] **Step 4: Run GREEN test and commit**
+- [x] **Step 4: Run GREEN test and commit**
 
 Run: `python -m pytest backend/tests/test_desktop_offsite_backup_service.py -v`
 
@@ -113,7 +113,7 @@ Expected: copy, validation, retention, retry, and redaction checks pass. Commit 
 - Scheduler executes `local.run_if_due(db)` before `offsite.sync_latest(db)` in one short-lived session.
 - API routes: `GET /api/system/backup-replica-status`, `PUT /api/system/backup-replica?directory=...`, and `DELETE /api/system/backup-replica`.
 
-- [ ] **Step 1: Write failing scheduler and API tests**
+- [x] **Step 1: Write failing scheduler and API tests**
 
 ```python
 def test_scheduler_runs_local_before_offsite_and_closes_session():
@@ -142,13 +142,13 @@ def test_replica_status_redacts_path_and_browser_mode_rejects_write(client, monk
 
 Add assertions that warehouse/sales receive `403` from all three routes, DELETE retains target files, and browser GET is disabled without probing a directory.
 
-- [ ] **Step 2: Run RED test**
+- [x] **Step 2: Run RED test**
 
 Run: `python -m pytest backend/tests/test_desktop_backup_scheduler.py backend/tests/test_system_safety.py backend/tests/test_auth_permissions.py -v`
 
 Expected: absent scheduler collaborator and 404 routes.
 
-- [ ] **Step 3: Implement local-first scheduler and desktop-only routes**
+- [x] **Step 3: Implement local-first scheduler and desktop-only routes**
 
 ```python
 def run_scheduled_backup(self):
@@ -164,7 +164,7 @@ def run_scheduled_backup(self):
 
 Inject `offsite_service_factory=DesktopOffsiteBackupService.for_active_database`. GET returns disabled status outside desktop mode; PUT/DELETE return HTTP 400 outside desktop mode. Map only service validation `ValueError` to 400 and retain existing middleware authorization.
 
-- [ ] **Step 4: Run GREEN test and commit**
+- [x] **Step 4: Run GREEN test and commit**
 
 Run: `python -m pytest backend/tests/test_desktop_offsite_backup_service.py backend/tests/test_desktop_backup_scheduler.py backend/tests/test_system_safety.py backend/tests/test_auth_permissions.py -v`
 
@@ -183,7 +183,7 @@ Expected: order, route protection, path redaction, and browser isolation pass. C
 - `selectedDirectory(result) -> string | null`.
 - `window.sellhelp.selectBackupDirectory() -> Promise<string | null>`, invoking `sellhelp:select-backup-directory` with no arguments.
 
-- [ ] **Step 1: Write failing Node tests**
+- [x] **Step 1: Write failing Node tests**
 
 ```javascript
 test('picker normalises one native directory result', () => {
@@ -199,13 +199,13 @@ test('preload picker accepts no renderer arguments', async () => {
 })
 ```
 
-- [ ] **Step 2: Run RED test**
+- [x] **Step 2: Run RED test**
 
 Run: `node --test desktop/tests/directory-picker.test.cjs`
 
 Expected: module and bridge are absent.
 
-- [ ] **Step 3: Implement the fixed picker boundary**
+- [x] **Step 3: Implement the fixed picker boundary**
 
 ```javascript
 function selectedDirectory(result) {
@@ -223,7 +223,7 @@ async function selectBackupDirectory(event) {
 
 Register the fixed IPC in main, expose only the no-argument bridge through the frozen preload object, add the test to the desktop test script, and include the helper in Electron Builder files.
 
-- [ ] **Step 4: Run GREEN test and commit**
+- [x] **Step 4: Run GREEN test and commit**
 
 Run: `npm.cmd --prefix desktop test`
 
@@ -244,7 +244,7 @@ Expected: existing desktop contracts remain green. Commit `feat: select desktop 
 - `getBackupReplicaStatus()`, `configureBackupReplica(directory)`, `disableBackupReplica()`.
 - `replicaStatus` and `chooseBackupReplicaDirectory()` in the existing backup tab.
 
-- [ ] **Step 1: Write failing frontend contracts**
+- [x] **Step 1: Write failing frontend contracts**
 
 ```javascript
 test('replica helpers use protected system routes', async () => {
@@ -266,13 +266,13 @@ test('Settings uses picker and exposes directory name only', async () => {
 })
 ```
 
-- [ ] **Step 2: Run RED test**
+- [x] **Step 2: Run RED test**
 
 Run: `node --test frontend/tests/desktop-backup-ui.test.mjs frontend/tests/desktop-offsite-backup-ui.test.mjs`
 
 Expected: API helpers and UI status do not exist.
 
-- [ ] **Step 3: Implement controls and documentation**
+- [x] **Step 3: Implement controls and documentation**
 
 ```javascript
 export const getBackupReplicaStatus = () => api.get('/system/backup-replica-status')
@@ -289,7 +289,7 @@ async function chooseBackupReplicaDirectory() {
 
 Load backup list, local status, and replica status in one `Promise.all`. Add an unframed status/control section to the existing backup tab that shows configuration, directory name, policy, last success, pending state, and safe errors. Hide picker controls outside Electron; preserve manual backup, download, restore, and delete. Document target selection, hourly retry, disabling without deletion, and use of a different physical disk.
 
-- [ ] **Step 4: Run GREEN test and commit**
+- [x] **Step 4: Run GREEN test and commit**
 
 Run: `npm.cmd test`
 
@@ -302,7 +302,7 @@ Expected: suite and build pass, except recorded existing Sass/bundle warnings. C
 **Files:**
 - Modify: `docs/superpowers/plans/2026-08-19-desktop-offsite-backups.md`
 
-- [ ] **Step 1: Run final verification**
+- [x] **Step 1: Run final verification**
 
 Run: `python -m pytest backend/tests -q`
 
@@ -314,10 +314,19 @@ Run: `npm.cmd run build`
 
 Expected: all suites and build pass.
 
-- [ ] **Step 2: Review scope and record verified evidence**
+- [x] **Step 2: Review scope and record verified evidence**
 
 Run: `git diff --check 046cc7f..HEAD`
 
 Run: `git status --short`
 
 Expected: no whitespace errors or generated output. Mark only executed checks, then commit `docs: record offsite backup verification` with this plan file only.
+
+## Verified Evidence
+
+- `python -m pytest backend/tests -q`: 170 passed (79.16s).
+- `npm.cmd --prefix desktop test`: 21 passed.
+- `npm.cmd test`: 53 passed.
+- `npm.cmd run build`: completed successfully. Existing Sass legacy API, VueUse PURE annotation, and 500.66 kB charts chunk warnings remain.
+- Fresh desktop-mode smoke on a temporary data directory: health returned 200; configuring a replica returned only `replica-target`, status was pending, and `/api/system/config` contained no `desktop_offsite_backup` value or target path.
+- Review repairs in `e1ee95e`: the managed status key is excluded from generic configuration read/write, unsynced configuration no longer raises 500, and only valid generated timestamp names participate in replica selection and retention.
