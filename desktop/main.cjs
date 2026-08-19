@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { createBackendLifecycle } = require('./backend-lifecycle.cjs')
+const { selectedDirectory } = require('./directory-picker.cjs')
 const { createQuitCoordinator } = require('./lifecycle.cjs')
 const {
   backendCommand,
@@ -331,12 +332,23 @@ async function restartBackend(event) {
   }
 }
 
+async function selectBackupDirectory(event) {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
+    return null
+  }
+  return selectedDirectory(await dialog.showOpenDialog(mainWindow, {
+    title: 'Choose backup replica directory',
+    properties: ['openDirectory'],
+  }))
+}
+
 async function shutdown() {
   shuttingDown = true
   return quitCoordinator.requestQuit()
 }
 
 ipcMain.handle('sellhelp:restart-backend', restartBackend)
+ipcMain.handle('sellhelp:select-backup-directory', selectBackupDirectory)
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()

@@ -7,7 +7,7 @@
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "test": "node --test tests/runtime.test.cjs tests/lifecycle.test.cjs tests/backend-lifecycle.test.cjs tests/build-contract.test.cjs tests/packaged-smoke.test.cjs tests/packaged-smoke-runtime.test.cjs tests/packaged-smoke-paths.test.cjs tests/packaged-smoke-preflight.test.cjs tests/packaged-smoke-cleanup.test.cjs",
+    "test": "node --test tests/runtime.test.cjs tests/lifecycle.test.cjs tests/backend-lifecycle.test.cjs tests/directory-picker.test.cjs tests/build-contract.test.cjs tests/packaged-smoke.test.cjs tests/packaged-smoke-runtime.test.cjs tests/packaged-smoke-paths.test.cjs tests/packaged-smoke-preflight.test.cjs tests/packaged-smoke-cleanup.test.cjs",
     "test:packaged": "node tests/packaged-smoke.cjs",
     "dist": "electron-builder --win nsis --x64"
   },
@@ -27,6 +27,7 @@
       "main.cjs",
       "preload.cjs",
       "runtime.cjs",
+      "directory-picker.cjs",
       "backend-lifecycle.cjs",
       "lifecycle.cjs",
       "resources/**",
