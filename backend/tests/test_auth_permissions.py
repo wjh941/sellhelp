@@ -116,6 +116,7 @@ def test_role_rules_protect_owner_actions_allow_assigned_workflow_and_revoke_log
 
     assert client.post("/api/products", json={"name": "Blocked", "unit": "box"}, headers=sales_headers).status_code == 403
     assert client.post("/api/system/backup", headers=warehouse_headers).status_code == 403
+    assert client.get("/api/system/backup-status", headers=sales_headers).status_code == 403
     assert client.get("/api/export/sales-history", headers=sales_headers).status_code == 403
     assert client.get("/api/export/stock-takes", headers=warehouse_headers).status_code == 403
     assert client.post("/api/products", json={"name": "Blocked", "unit": "box"}, headers=warehouse_headers).status_code == 403

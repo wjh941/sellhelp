@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 from pathlib import Path
 import sqlite3
 from urllib.parse import quote
@@ -7,7 +8,7 @@ import pytest
 from sqlalchemy import create_engine
 
 from app import database
-from app.models.all_models import Customer, Product, SalesOrder, SalesOrderItem
+from app.models.all_models import Customer, Product, SalesOrder, SalesOrderItem, SystemConfig
 from app.routers import system_router
 
 
@@ -82,6 +83,52 @@ def test_backup_operations_reject_unsafe_filenames(client, method, path, filenam
     )
 
     assert response.status_code == 400
+
+
+def test_backup_status_exposes_desktop_policy_without_a_database_path(client, db_session, monkeypatch, tmp_path):
+    """The Settings status must show recovery policy without exposing local data locations."""
+    database_path = tmp_path / "configured.db"
+    database_path.touch()
+    monkeypatch.setattr(database, "SQLALCHEMY_DATABASE_URL", f"sqlite:///{database_path.as_posix()}")
+    monkeypatch.setenv("SELLHELP_DESKTOP_MODE", "1")
+    db_session.add(SystemConfig(
+        key="desktop_automatic_backup",
+        value=json.dumps({
+            "last_success": {
+                "completed_at": "2026-08-19T00:00:00+00:00",
+                "filename": "sellhelp_auto_20260819_000000000000.db",
+                "size": 32,
+            },
+            "last_failure": None,
+        }),
+    ))
+    db_session.commit()
+
+    response = client.get("/api/system/backup-status")
+
+    assert response.status_code == 200
+    assert response.json()["enabled"] is True
+    assert response.json()["interval_hours"] == 24
+    assert response.json()["retention_count"] == 14
+    assert response.json()["last_success"]["filename"] == "sellhelp_auto_20260819_000000000000.db"
+    assert "path" not in json.dumps(response.json())
+
+
+def test_backup_operations_allow_only_valid_automatic_backup_filenames(client, monkeypatch, tmp_path):
+    """Automatic copies must remain downloadable without weakening the backup-directory boundary."""
+    database_path = tmp_path / "configured.db"
+    database_path.touch()
+    monkeypatch.setattr(database, "SQLALCHEMY_DATABASE_URL", f"sqlite:///{database_path.as_posix()}")
+    backup_dir = database.active_backup_directory()
+    backup_dir.mkdir()
+    filename = "sellhelp_auto_20260819_000000000000.db"
+    (backup_dir / filename).write_bytes(b"automatic backup")
+
+    valid = client.get(f"/api/system/backups/{filename}")
+    invalid = client.get("/api/system/backups/sellhelp_auto_.._outside.db")
+
+    assert valid.status_code == 200
+    assert invalid.status_code == 400
 
 
 def test_backup_uses_active_database_parent_and_sqlite_backup_api(client, monkeypatch, tmp_path):

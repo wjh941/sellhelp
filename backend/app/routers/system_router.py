@@ -12,11 +12,15 @@ import json
 import re
 
 from ..database import active_backup_directory, engine, get_active_sqlite_db_path, get_db, sqlite_backup
+from ..desktop_runtime import is_desktop_mode
 from ..models.all_models import Product, ProductBatch, SalesOrder, SalesOrderItem, SystemConfig, WeeklyReport
+from ..services.desktop_backup_service import DesktopBackupService
 
 router = APIRouter(prefix="/api/system", tags=["系统管理"])
 
-_BACKUP_FILENAME = re.compile(r"(?:yingtai_backup|pre_restore)_\d{8}_\d{6}\.db")
+_BACKUP_FILENAME = re.compile(
+    r"(?:(?:yingtai_backup|pre_restore)_\d{8}_\d{6}|sellhelp_auto_\d{8}_\d{12})\.db"
+)
 
 
 def _backup_directory():
@@ -40,6 +44,16 @@ def _active_database_path() -> str:
 
 
 # ========== 数据库备份 ==========
+
+@router.get("/backup-status")
+def get_backup_status(db: Session = Depends(get_db)):
+    if not is_desktop_mode():
+        return DesktopBackupService.disabled_status(db)
+    try:
+        return DesktopBackupService.for_active_database().status(db, enabled=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
 
 @router.post("/backup")
 def backup_database(
