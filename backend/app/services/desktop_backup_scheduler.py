@@ -7,6 +7,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.database import SessionLocal
 from app.services.desktop_backup_service import DesktopBackupService
+from app.services.desktop_offsite_backup_service import DesktopOffsiteBackupService
 
 
 logger = logging.getLogger(__name__)
@@ -14,10 +15,17 @@ JOB_ID = "desktop_automatic_backup_due_check"
 
 
 class DesktopBackupScheduler:
-    def __init__(self, scheduler=None, session_factory=SessionLocal, service_factory=DesktopBackupService.for_active_database):
+    def __init__(
+        self,
+        scheduler=None,
+        session_factory=SessionLocal,
+        service_factory=DesktopBackupService.for_active_database,
+        offsite_service_factory=DesktopOffsiteBackupService.for_active_database,
+    ):
         self.scheduler = scheduler or BackgroundScheduler(timezone="Asia/Shanghai")
         self.session_factory = session_factory
         self.service_factory = service_factory
+        self.offsite_service_factory = offsite_service_factory
         self._started = False
 
     def start(self):
@@ -45,6 +53,7 @@ class DesktopBackupScheduler:
         db = self.session_factory()
         try:
             self.service_factory().run_if_due(db)
+            self.offsite_service_factory().sync_latest(db)
         except Exception as exc:
             logger.error("Desktop automatic backup scheduler failed: %s", type(exc).__name__)
         finally:

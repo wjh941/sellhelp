@@ -28,6 +28,18 @@ class TrackedSession:
         self.closed = True
 
 
+class RecordingService:
+    def __init__(self, name, calls):
+        self.name = name
+        self.calls = calls
+
+    def run_if_due(self, db):
+        self.calls.append((self.name, db))
+
+    def sync_latest(self, db):
+        self.calls.append((self.name, db))
+
+
 def test_scheduler_submits_an_immediate_non_overlapping_hourly_due_check_and_closes_session():
     """A duplicated or blocking job could copy the database twice or retain a worker session."""
     backend = FakeBackgroundScheduler()
@@ -60,6 +72,23 @@ def test_scheduler_submits_an_immediate_non_overlapping_hourly_due_check_and_clo
     assert received_sessions == sessions
     assert sessions[0].closed is True
     assert backend.shutdown_wait_values == [False]
+
+
+def test_scheduler_runs_local_backup_before_offsite_retry_and_closes_session():
+    backend = FakeBackgroundScheduler()
+    calls = []
+    sessions = []
+    scheduler = DesktopBackupScheduler(
+        scheduler=backend,
+        session_factory=lambda: sessions.append(TrackedSession()) or sessions[-1],
+        service_factory=lambda: RecordingService("local", calls),
+        offsite_service_factory=lambda: RecordingService("offsite", calls),
+    )
+
+    scheduler.run_scheduled_backup()
+
+    assert calls == [("local", sessions[0]), ("offsite", sessions[0])]
+    assert sessions[0].closed is True
 
 
 def test_lifecycle_starts_and_stops_desktop_backup_only_in_desktop_mode(monkeypatch):

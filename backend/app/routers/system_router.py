@@ -15,6 +15,7 @@ from ..database import active_backup_directory, engine, get_active_sqlite_db_pat
 from ..desktop_runtime import is_desktop_mode
 from ..models.all_models import Product, ProductBatch, SalesOrder, SalesOrderItem, SystemConfig, WeeklyReport
 from ..services.desktop_backup_service import DesktopBackupService
+from ..services.desktop_offsite_backup_service import DesktopOffsiteBackupService
 
 router = APIRouter(prefix="/api/system", tags=["系统管理"])
 
@@ -51,6 +52,39 @@ def get_backup_status(db: Session = Depends(get_db)):
         return DesktopBackupService.disabled_status(db)
     try:
         return DesktopBackupService.for_active_database().status(db, enabled=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/backup-replica-status")
+def get_backup_replica_status(db: Session = Depends(get_db)):
+    if not is_desktop_mode():
+        return DesktopOffsiteBackupService.disabled_status(db)
+    try:
+        return DesktopOffsiteBackupService.for_active_database().status(db, enabled=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/backup-replica")
+def configure_backup_replica(
+    directory: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+):
+    if not is_desktop_mode():
+        raise HTTPException(status_code=400, detail="Offsite backups require desktop mode")
+    try:
+        return DesktopOffsiteBackupService.for_active_database().configure(db, directory)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/backup-replica")
+def disable_backup_replica(db: Session = Depends(get_db)):
+    if not is_desktop_mode():
+        raise HTTPException(status_code=400, detail="Offsite backups require desktop mode")
+    try:
+        return DesktopOffsiteBackupService.for_active_database().disable(db)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

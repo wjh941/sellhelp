@@ -114,6 +114,39 @@ def test_backup_status_exposes_desktop_policy_without_a_database_path(client, db
     assert "path" not in json.dumps(response.json())
 
 
+def test_backup_replica_routes_redact_target_and_reject_browser_writes(client, monkeypatch, tmp_path):
+    database_path = tmp_path / "configured.db"
+    database_path.touch()
+    target = tmp_path / "external"
+    target.mkdir()
+    preserved = target / "sellhelp_auto_20260819_000000000000.db"
+    preserved.write_bytes(b"backup")
+    monkeypatch.setattr(database, "SQLALCHEMY_DATABASE_URL", f"sqlite:///{database_path.as_posix()}")
+    monkeypatch.setenv("SELLHELP_DESKTOP_MODE", "1")
+
+    configured = client.put("/api/system/backup-replica", params={"directory": str(target)})
+    status = client.get("/api/system/backup-replica-status")
+    disabled = client.delete("/api/system/backup-replica")
+
+    assert configured.status_code == 200
+    assert status.status_code == 200
+    assert status.json()["configured"] is True
+    assert status.json()["directory_name"] == "external"
+    assert str(target) not in json.dumps(status.json())
+    assert disabled.status_code == 200
+    assert disabled.json()["configured"] is False
+    assert preserved.is_file()
+
+    monkeypatch.delenv("SELLHELP_DESKTOP_MODE", raising=False)
+    browser_status = client.get("/api/system/backup-replica-status")
+    browser_write = client.put("/api/system/backup-replica", params={"directory": str(target)})
+
+    assert browser_status.status_code == 200
+    assert browser_status.json()["enabled"] is False
+    assert browser_status.json()["configured"] is False
+    assert browser_write.status_code == 400
+
+
 def test_backup_operations_allow_only_valid_automatic_backup_filenames(client, monkeypatch, tmp_path):
     """Automatic copies must remain downloadable without weakening the backup-directory boundary."""
     database_path = tmp_path / "configured.db"
