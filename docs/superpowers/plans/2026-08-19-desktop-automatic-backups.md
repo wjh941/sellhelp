@@ -49,7 +49,7 @@
 - Produces: `DesktopBackupService.for_active_database() -> DesktopBackupService` and `DesktopBackupService.disabled_status(db) -> dict` for the router's active and non-desktop branches.
 - Produces: constants `AUTO_BACKUP_PREFIX = "sellhelp_auto_"`, `AUTO_BACKUP_INTERVAL_HOURS = 24`, `AUTO_BACKUP_RETENTION_COUNT = 14`, and `AUTO_BACKUP_STATUS_KEY = "desktop_automatic_backup"`.
 
-- [ ] **Step 1: Write the failing service tests**
+- [x] **Step 1: Write the failing service tests**
 
 Build `file_session_factory(database_path)` in this test module with a SQLAlchemy engine for the same file database and create `SystemConfig.__table__` on that engine. Do not use the shared in-memory `db_session` fixture, because the service state and SQLite source must exercise one real file-backed database.
 
@@ -98,13 +98,13 @@ def test_failed_backup_removes_partial_file_records_failure_and_can_retry(tmp_pa
     assert not list((database_path.parent / "backups").glob("sellhelp_auto_*.db"))
 ```
 
-- [ ] **Step 2: Run the service tests to verify they fail**
+- [x] **Step 2: Run the service tests to verify they fail**
 
 Run: `python -m pytest backend/tests/test_desktop_backup_service.py -v`
 
 Expected: FAIL because `app.services.desktop_backup_service` and `DesktopBackupService` do not exist.
 
-- [ ] **Step 3: Write the minimal service implementation**
+- [x] **Step 3: Write the minimal service implementation**
 
 ```python
 class DesktopBackupService:
@@ -140,13 +140,13 @@ class DesktopBackupService:
 
 Persist only `last_success` (`completed_at`, `filename`, `size`) and `last_failure` (`occurred_at`, `error_type`) as JSON. Parse timestamps as UTC, treat absent or malformed state as overdue, and never remove a non-automatic filename.
 
-- [ ] **Step 4: Run the service tests to verify they pass**
+- [x] **Step 4: Run the service tests to verify they pass**
 
 Run: `python -m pytest backend/tests/test_desktop_backup_service.py -v`
 
 Expected: PASS. Confirm generated backups are readable SQLite data, the 15th automatic copy removes only the oldest automatic file, recent success skips copying, and a later healthy service retries after a stored failure.
 
-- [ ] **Step 5: Commit the service slice**
+- [x] **Step 5: Commit the service slice**
 
 ```powershell
 git add backend/app/services/desktop_backup_service.py backend/tests/test_desktop_backup_service.py
@@ -165,7 +165,7 @@ git commit -m "feat: add desktop automatic backup service"
 - Produces: `DesktopBackupScheduler(scheduler=None, session_factory=SessionLocal, service_factory=...)` with `start()`, `shutdown()`, and `run_scheduled_backup()`.
 - Produces: `desktop_backup_scheduler`, started by `initialize_database()` after `init_db()` only in desktop mode and stopped by FastAPI lifespan shutdown.
 
-- [ ] **Step 1: Write the failing scheduler and lifespan tests**
+- [x] **Step 1: Write the failing scheduler and lifespan tests**
 
 ```python
 def test_desktop_scheduler_submits_immediate_hourly_job_and_closes_its_session():
@@ -202,13 +202,13 @@ def test_lifecycle_starts_desktop_scheduler_only_after_database_setup(monkeypatc
     assert "backup_stop" in calls
 ```
 
-- [ ] **Step 2: Run the scheduler tests to verify they fail**
+- [x] **Step 2: Run the scheduler tests to verify they fail**
 
 Run: `python -m pytest backend/tests/test_desktop_backup_scheduler.py -v`
 
 Expected: FAIL because `DesktopBackupScheduler` and `shutdown_runtime_services` do not exist.
 
-- [ ] **Step 3: Write the minimal scheduler and lifecycle wiring**
+- [x] **Step 3: Write the minimal scheduler and lifecycle wiring**
 
 ```python
 class DesktopBackupScheduler:
@@ -234,13 +234,13 @@ class DesktopBackupScheduler:
 
 In `main.py`, call `desktop_backup_scheduler.start()` only after `init_db()` and only in desktop mode. Add `shutdown_runtime_services()` to stop the desktop scheduler before the existing market scheduler shutdown, and call it from the lifespan `finally` block. Preserve the existing market scheduler environment switch and startup order.
 
-- [ ] **Step 4: Run scheduler and existing lifecycle tests to verify they pass**
+- [x] **Step 4: Run scheduler and existing lifecycle tests to verify they pass**
 
 Run: `python -m pytest backend/tests/test_desktop_backup_scheduler.py backend/tests/test_market_sync_scheduler.py backend/tests/test_desktop_startup.py -v`
 
 Expected: PASS. Confirm non-desktop mode never starts the backup scheduler and lifecycle shutdown is nonblocking.
 
-- [ ] **Step 5: Commit the scheduler slice**
+- [x] **Step 5: Commit the scheduler slice**
 
 ```powershell
 git add backend/app/services/desktop_backup_scheduler.py backend/app/main.py backend/tests/test_desktop_backup_scheduler.py
@@ -259,7 +259,7 @@ git commit -m "feat: schedule desktop automatic backups"
 - Produces: `GET /api/system/backup-status` response fields `enabled`, `interval_hours`, `retention_count`, `is_due`, `last_success`, and `last_failure`.
 - Produces: backup filename acceptance for `sellhelp_auto_YYYYMMDD_HHMMSSffffff.db` only; all existing unsafe-name rejections remain intact.
 
-- [ ] **Step 1: Write the failing route and authorization tests**
+- [x] **Step 1: Write the failing route and authorization tests**
 
 ```python
 def test_backup_status_exposes_policy_without_leaking_database_path(client, db_session, monkeypatch, tmp_path):
@@ -290,13 +290,13 @@ def test_backup_operations_accept_only_the_automatic_backup_filename_format(clie
 
 Extend the existing multi-role permission test with `GET /api/system/backup-status` for warehouse and sales users, asserting the same owner-only protection as the rest of `/api/system`.
 
-- [ ] **Step 2: Run the route tests to verify they fail**
+- [x] **Step 2: Run the route tests to verify they fail**
 
 Run: `python -m pytest backend/tests/test_system_safety.py backend/tests/test_auth_permissions.py -v`
 
 Expected: FAIL with `404` for `/api/system/backup-status` and `400` for the valid automatic filename.
 
-- [ ] **Step 3: Write the minimal route changes**
+- [x] **Step 3: Write the minimal route changes**
 
 ```python
 @router.get("/backup-status")
@@ -313,13 +313,13 @@ _BACKUP_FILENAME = re.compile(
 
 Construct `DesktopBackupService.for_active_database()` from `get_active_sqlite_db_path()` and `active_backup_directory()`. Keep the route under `/api/system`, so the existing owner rule applies. The disabled response uses the same policy fields, reports `enabled: false`, and performs no backup file I/O.
 
-- [ ] **Step 4: Run the route tests to verify they pass**
+- [x] **Step 4: Run the route tests to verify they pass**
 
 Run: `python -m pytest backend/tests/test_system_safety.py backend/tests/test_auth_permissions.py -v`
 
 Expected: PASS. Confirm safe download remains constrained to the active backup directory and non-owner requests remain `403` when standalone mode is disabled.
 
-- [ ] **Step 5: Commit the route slice**
+- [x] **Step 5: Commit the route slice**
 
 ```powershell
 git add backend/app/routers/system_router.py backend/tests/test_system_safety.py backend/tests/test_auth_permissions.py
@@ -340,7 +340,7 @@ git commit -m "feat: report desktop backup status"
 - Produces: `getBackupStatus()` API helper and a `backupStatus` Settings state loaded with the existing backup list.
 - Produces: user-facing status for enabled, last success, 14-copy retention, and latest failure; no browser-side scheduler or direct filesystem access.
 
-- [ ] **Step 1: Write the failing frontend API and Settings contract tests**
+- [x] **Step 1: Write the failing frontend API and Settings contract tests**
 
 ```javascript
 test('getBackupStatus uses the protected automatic backup status route', async () => {
@@ -361,13 +361,13 @@ test('Settings loads and renders automatic backup status beside manual backups',
 })
 ```
 
-- [ ] **Step 2: Run the frontend tests to verify they fail**
+- [x] **Step 2: Run the frontend tests to verify they fail**
 
 Run: `node --test tests/external-market-api.test.mjs tests/desktop-backup-ui.test.mjs`
 
 Expected: FAIL because `getBackupStatus`, `backupStatus`, and the Settings automatic-backup content do not exist.
 
-- [ ] **Step 3: Write the minimal Settings and documentation changes**
+- [x] **Step 3: Write the minimal Settings and documentation changes**
 
 ```javascript
 export const getBackupStatus = () => api.get('/system/backup-status')
@@ -387,7 +387,7 @@ const loadBackups = async () => {
 
 Add an unframed status description immediately above the existing backup statistics. Show the 24-hour/14-copy policy only when `enabled` is true; otherwise show that automatic desktop backups are unavailable in the current mode. Render the last failure as a warning alert without exposing a filesystem path. Add `frontend/tests/desktop-backup-ui.test.mjs` to the existing Node test command. Update `README-OPERATE.md` to state that automatic copies are local only, run while the desktop app is open, retain 14 automatic copies, and should still be copied to separate storage for device-loss protection.
 
-- [ ] **Step 4: Run frontend tests and the production build to verify they pass**
+- [x] **Step 4: Run frontend tests and the production build to verify they pass**
 
 Run: `npm.cmd test`
 
@@ -397,7 +397,7 @@ Run: `npm.cmd run build`
 
 Expected: exit code `0`; record only pre-existing Sass or bundle-size warnings.
 
-- [ ] **Step 5: Commit the UI and documentation slice**
+- [x] **Step 5: Commit the UI and documentation slice**
 
 ```powershell
 git add frontend/src/api/index.js frontend/src/views/Settings.vue frontend/tests/desktop-backup-ui.test.mjs frontend/package.json README-OPERATE.md
@@ -413,19 +413,19 @@ git commit -m "feat: show desktop automatic backup status"
 - Consumes: all completed Tasks 1-4.
 - Produces: fresh test, build, and diff evidence; no additional runtime behavior.
 
-- [ ] **Step 1: Run the complete backend suite**
+- [x] **Step 1: Run the complete backend suite**
 
 Run: `python -m pytest backend/tests -q`
 
 Expected: all backend tests pass with no new warnings or failures.
 
-- [ ] **Step 2: Run all desktop runtime contracts**
+- [x] **Step 2: Run all desktop runtime contracts**
 
 Run: `npm.cmd --prefix desktop test`
 
 Expected: all Electron lifecycle, backend-launch, packaging-contract, and smoke-helper tests pass without generating or installing an artifact.
 
-- [ ] **Step 3: Run frontend suite and production build**
+- [x] **Step 3: Run frontend suite and production build**
 
 Run: `npm.cmd test`
 
@@ -435,7 +435,7 @@ Run: `npm.cmd run build`
 
 Expected: exit code `0`.
 
-- [ ] **Step 4: Inspect scope and commit the verification record**
+- [x] **Step 4: Inspect scope and commit the verification record**
 
 Run: `git diff --check f6b6655..HEAD`
 
